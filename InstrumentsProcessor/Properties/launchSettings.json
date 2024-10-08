@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "MacPerf": {
+      "commandName": "Executable",
+      "executablePath": "D:\\WPA_FOR_XPERF\\analyzer\\wpa\\bin\\x64\\Debug\\net8.0-windows\\win-x64\\wpa.exe",
+      "commandLineArgs": "-nodefault -addsearchdir D:\\Microsoft-Performance-Tools-Apple\\InstrumentsProcessor\\bin\\Debug\\netstandard2.0"
+    }
+  }
+}
