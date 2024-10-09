@@ -44,7 +44,7 @@ jobs:
 
         foreach ($plugin in $dirs.Keys) {
           $sourcePath = $dirs[$plugin]
-          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Linux/MicrosoftPerfToolkitAddins/PTIX"
+          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Apple/MicrosoftPerfToolkitAddins/PTIX"
           New-Item -ItemType Directory -Force -Path $targetPath
           $pluginManifestPath = "$sourcePath/pluginManifest.json"
 
@@ -69,7 +69,7 @@ jobs:
 
         foreach ($dir in $dirs.Keys) {
           $sourcePath = $dirs[$dir]
-          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Linux/MicrosoftPerfToolkitAddins/$dir"
+          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Apple/MicrosoftPerfToolkitAddins/$dir"
           New-Item -ItemType Directory -Force -Path $targetPath
           Copy-Item $sourcePath -Destination $targetPath -Recurse
         }
