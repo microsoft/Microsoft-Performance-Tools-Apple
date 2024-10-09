@@ -39,7 +39,7 @@ jobs:
     - name: Create PTIX
       run: |
         $dirs = @{
-          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.1/"
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
         }
 
         foreach ($plugin in $dirs.Keys) {
@@ -64,7 +64,7 @@ jobs:
     - name: Copy files and prepare artifacts
       run: |
         $dirs = @{
-          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.1/"
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
         }
 
         foreach ($dir in $dirs.Keys) {

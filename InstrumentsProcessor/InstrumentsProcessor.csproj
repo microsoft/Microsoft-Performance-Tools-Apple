@@ -18,4 +18,10 @@
     <PackageReference Include="Microsoft.Performance.SDK" Version="1.0.27" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="pluginManifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
