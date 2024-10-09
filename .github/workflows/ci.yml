@@ -23,7 +23,7 @@ jobs:
           8.x
 
     - name: Restore dependencies
-      run: dotnet restore Microsoft-Perf-Tools-Apple.sln
+      run: dotnet restore Microsoft-Performance-Tools-Apple.sln
 
     - name: Build projects
       run: |
@@ -31,7 +31,7 @@ jobs:
         dotnet build InstrumentsProcessorTests/InstrumentsProcessorTests.csproj --configuration Release --no-restore
 
     - name: Test projects
-      run: dotnet test Microsoft-Perf-Tools-Apple.sln --no-restore --verbosity normal
+      run: dotnet test Microsoft-Performance-Tools-Apple.sln --no-restore --verbosity normal
 
     - name: Install PluginTool
       run: dotnet tool install --global Microsoft.Performance.Toolkit.Plugins.Cli --version 0.1.25-preview      
