@@ -1,0 +1,81 @@
+name: CI Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: |
+          6.x
+          8.x
+
+    - name: Restore dependencies
+      run: dotnet restore Microsoft-Performance-Tools-Apple.sln
+
+    - name: Build projects
+      run: |
+        dotnet build InstrumentsProcessor/InstrumentsProcessor.csproj --configuration Release --no-restore
+        dotnet build InstrumentsProcessorTests/InstrumentsProcessorTests.csproj --configuration Release --no-restore
+
+    - name: Test projects
+      run: dotnet test Microsoft-Performance-Tools-Apple.sln --no-restore --verbosity normal
+
+    - name: Install PluginTool
+      run: dotnet tool install --global Microsoft.Performance.Toolkit.Plugins.Cli --version 0.1.25-preview      
+
+    - name: Create PTIX
+      run: |
+        $dirs = @{
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
+        }
+
+        foreach ($plugin in $dirs.Keys) {
+          $sourcePath = $dirs[$plugin]
+          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Apple/MicrosoftPerfToolkitAddins/PTIX"
+          New-Item -ItemType Directory -Force -Path $targetPath
+          $pluginManifestPath = "$sourcePath/pluginManifest.json"
+
+          if (!(Test-Path $pluginManifestPath)) {
+            Write-Error "pluginManifest.json not found in $sourcePath"
+          }
+
+          $pluginManifest = Get-Content -Path $pluginManifestPath | ConvertFrom-Json
+
+          $pluginId = $pluginManifest.identity.id
+          $pluginVersion = $pluginManifest.identity.version
+          $packageName = "$pluginId-$pluginVersion.ptix"
+
+          plugintool pack -s $sourcePath -o "$targetPath/$packageName"
+        }
+
+    - name: Copy files and prepare artifacts
+      run: |
+        $dirs = @{
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
+        }
+
+        foreach ($dir in $dirs.Keys) {
+          $sourcePath = $dirs[$dir]
+          $targetPath = "${{ github.workspace }}/drop/Microsoft-Performance-Tools-Apple/MicrosoftPerfToolkitAddins/$dir"
+          New-Item -ItemType Directory -Force -Path $targetPath
+          Copy-Item $sourcePath -Destination $targetPath -Recurse
+        }
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: drop
+        path: ${{ github.workspace }}/drop/

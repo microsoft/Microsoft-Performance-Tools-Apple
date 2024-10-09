@@ -159,7 +159,7 @@ namespace InstrumentsProcessor.Tables
 
         public static string NoteProjector(ThreadStateEvent e)
         {
-            return e.Note.Value;
+            return e.Note?.Value ?? string.Empty;
         }
 
         public static string SummaryProjector(ThreadStateEvent e)
