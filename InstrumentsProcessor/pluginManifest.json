@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/microsoft-performance-toolkit-sdk/main/src/PluginsSystem/Tools/Microsoft.Performance.Toolkit.Plugins.Cli/Manifest/PluginManifestSchema.json",
+  "identity": {
+    "id": "Microsoft.Performance.Toolkit.Plugins.PerfDataXmlExtension",
+    "version": "1.0.0"
+  },
+  "displayName": "Apple - Perf",
+  "description": "Enables viewing events and tables recorded with the Instruments tracing app",
+  "owners": [
+    {
+      "name": "Benjaming Galindo-Navarro",
+      "address": "1 Microsoft Way, Redmond, WA 98052",
+      "emailAddresses": [ "benjaming@microsoft.com" ],
+      "phoneNumbers": []
+    },
+    {
+      "name": "Hani Nemati",
+      "address": "1 Microsoft Way, Redmond, WA 98052",
+      "emailAddresses": [ "hani.nemati@microsoft.com" ],
+      "phoneNumbers": []
+    }
+  ],
+  "projectUrl": "https://github.com/microsoft/Microsoft-Performance-Tools-Apple",
+  "manifestVersion": 1.0
+}
