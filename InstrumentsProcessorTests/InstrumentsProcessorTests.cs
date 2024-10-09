@@ -1,5 +1,6 @@
-﻿using System.Data.Common;
-using System;
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 using Microsoft.Performance.Toolkit.Engine;
 using System.Reflection;
 using Microsoft.Performance.SDK.Extensibility;
