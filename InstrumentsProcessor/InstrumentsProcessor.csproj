@@ -11,7 +11,7 @@
 	<Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
 	<RepositoryUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</RepositoryUrl>
 	<PackageProjectUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</PackageProjectUrl>
-	<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+	<PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
