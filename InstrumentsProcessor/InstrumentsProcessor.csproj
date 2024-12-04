@@ -7,7 +7,7 @@
 	<Company>Microsoft Corp.</Company>
 	<Product>Performance ToolKit</Product>
 	<Description>Contains the Apple Perf Xml Data datasource plugin.</Description>
-	<PackageId>Microsoft.Performance.Toolkit.Plugins.PerfDataXmlExtension</PackageId>
+	<PackageId>Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor</PackageId>
 	<Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
 	<RepositoryUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</RepositoryUrl>
 	<PackageProjectUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</PackageProjectUrl>
