@@ -109,16 +109,6 @@ The tools can be run in several modes:
     ```dos
     "C:\Program Files\WindowsApps\Microsoft.WindowsPerformanceAnalyzerPreview_10.0.22504.0_x64__8wekyb3d8bbwe\10\Windows Performance Toolkit\wpaexporter.exe" -addsearchdir PLUGIN_FOLDER -i traceFile
     ```
-# Using the plugin (Public)- Step by step
-
-# How to capture a trace or logs
-- TODO: fill in
-
-# How to load the logs in the UI
-
-- InstrumentsProcessor
-  - WPA -> Open -> (Select Instruments xml trace file)
-
 # How do I use WPA in general?
 If you want to learn how to use the GUI UI in general see [WPA MSDN Docs](https://docs.microsoft.com/en-us/windows-hardware/test/wpt/windows-performance-analyzer)
 
