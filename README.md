@@ -1,13 +1,69 @@
-# Microsoft Performance Tools Linux / Android
+
+# Microsoft Performance Tools Apple
 
 > This repo contains Apple Analysis tools built with the [Microsoft Performance Toolkit SDK](https://github.com/microsoft/microsoft-performance-toolkit-sdk).
 
 > Tools are built with open source .NET Core and can be run on the cmd-line or in the WPA GUI. All the logs that are supported are open source. 
 
-> Tracing supported: 
-- [Instruments](https://forums.developer.apple.com/forums/tags/instruments) (Kernel CPU scheduling, Processes, Threads, Syscalls, etc)
+## Tracing supported:
 
-# Prerequisites
+There are two options for capturing a trace on MacOS. The first is a UI-based trace viewer and capture tool called Instruments, while the second is a command-line tool called xctrace.
+### [Instruments (formerly Xray)](https://forums.developer.apple.com/forums/tags/instruments) 
+Instruments is a standalone application that comes with Xcode, and can be used independently or in conjunction with Xcode. Instruments shows a time line displaying any event occurring in the application, such as CPU activity variation, memory allocation, and network and file activity, together with graphs and statistics.
+#### Install Instruments:
+-   [Install Xcode on your Mac device]((https://developer.apple.com/support/xcode/)) 
+-   Open the Instruments application from the menu bar at Xcode -> Open Developer Tool -> Instruments
+![xcode](https://github.com/user-attachments/assets/264b77d6-7468-42dd-9cd3-925ace1663d9)
+
+####  Capture a Trace with Instruments:
+-   To start capturing a trace: Open Instruments -> File -> New
+-   Choose your profile and the select Choose.
+
+  ![543px-Available_profiles](https://github.com/user-attachments/assets/ea6bc1b6-90a0-4221-ae57-b174ebec15f6)
+
+#### Configure Symbol Path in Instruments:
+
+If it is necessary to load additional symbols, please refer to this section.
+-   To enable symbols from 3rd party applications, Open Instruments -> Settings...
+-   Choose Symbols and add the relevant paths to your local symbol files
+
+![symbol_load](https://github.com/user-attachments/assets/99e33ce1-c0ca-4ce0-9811-74b31da2b091)
+
+-   Note: Symbol decoding is performed on the Mac when the trace is captured, and cannot be done on Windows later
+
+### [xctrace](https://keith.github.io/xcode-man-pages/xctrace.1.html)
+
+xctrace is used to record, import, export, and symbolicate Instruments' .trace files via the command line.
+
+To use xctrace open a Terminal Window:  `'xctrace help [command]'`
+
+To capture a trace with a Time Profile template:
+
+`xctrace record --all-processes --template 'Time Profiler' --time-limit 5s`
+
+For more info about xctrace please visit:  [xctrace documentation](https://keith.github.io/xcode-man-pages/xctrace.1.html)
+
+## Install Microsoft Performance Toolkit Apple:
+- Download the latest WPA UI. You can download it from [Windows Performance Analyzer (Preview)](https://www.microsoft.com/en-us/p/windows-performance-analyzer-preview/9n58qrw40dfw). 
+- Download the latest Microsoft Performance Toolkit Apple [Releases](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/releases)
+- Extract the Microsoft-Performance-Tools-Apple.zip
+- Open WPA UI and click Install Plugin
+![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
+- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.0.ptix"
+
+## Capture Trace on MacOs:
+- Use Instruments or xctrace to capture the trace. Note that we support some of tables as shown above.
+- Download the [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh) to convert the captured trace into a compatible format for use with our plugin.
+- Open a Terminal and go to your Download folder and run `chmode +x trace-export.sh`
+- Run `./trace-export.sh --input <tracefile.trace>`
+
+![485px-Terminal-exporter](https://github.com/user-attachments/assets/e2119700-68f8-44cf-9e4d-dc8dfb612dee)
+
+- Copy <tracefile.xml> to your Windows machine and open it with the private plugin.
+
+![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
+
+# Developer Prerequisites
 
 ## Runtime prereqs
 - [.NET Core Runtime 3.1.x](https://dotnet.microsoft.com/download/dotnet-core/3.1)
@@ -53,6 +109,7 @@ The tools can be run in several modes:
     ```dos
     "C:\Program Files\WindowsApps\Microsoft.WindowsPerformanceAnalyzerPreview_10.0.22504.0_x64__8wekyb3d8bbwe\10\Windows Performance Toolkit\wpaexporter.exe" -addsearchdir PLUGIN_FOLDER -i traceFile
     ```
+# Using the plugin (Public)- Step by step
 
 # How to capture a trace or logs
 - TODO: fill in
