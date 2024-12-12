@@ -43,7 +43,7 @@ To capture a trace with a Time Profile template:
 
 For more info about xctrace please visit:  [xctrace documentation](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 
-## Install Microsoft Performance Toolkit Apple:
+## Install Microsoft Performance Toolkit Apple On WPA (UI):
 - Download the latest WPA UI. You can download it from [Windows Performance Analyzer (Preview)](https://www.microsoft.com/en-us/p/windows-performance-analyzer-preview/9n58qrw40dfw). 
 - Download the latest Microsoft Performance Toolkit Apple [Releases](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/releases)
 - Extract the Microsoft-Performance-Tools-Apple.zip
