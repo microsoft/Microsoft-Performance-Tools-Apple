@@ -43,14 +43,6 @@ To capture a trace with a Time Profile template:
 
 For more info about xctrace please visit:  [xctrace documentation](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 
-## Install Microsoft Performance Toolkit Apple:
-- Download the latest WPA UI. You can download it from [Windows Performance Analyzer (Preview)](https://www.microsoft.com/en-us/p/windows-performance-analyzer-preview/9n58qrw40dfw). 
-- Download the latest Microsoft Performance Toolkit Apple [Releases](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/releases)
-- Extract the Microsoft-Performance-Tools-Apple.zip
-- Open WPA UI and click Install Plugin
-![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
-- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.0.ptix"
-
 ## Capture Trace on MacOs:
 - Use Instruments or xctrace to capture the trace. Note that we support some of tables as shown above.
 - Download the [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh) to convert the captured trace into a compatible format for use with our plugin.
@@ -59,7 +51,15 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ![485px-Terminal-exporter](https://github.com/user-attachments/assets/e2119700-68f8-44cf-9e4d-dc8dfb612dee)
 
-- Copy <tracefile.xml> to your Windows machine and open it with the private plugin.
+## Install Microsoft Performance Toolkit Apple:
+- Download the latest WPA UI. You can download it from [Windows Performance Analyzer (Preview)](https://www.microsoft.com/en-us/p/windows-performance-analyzer-preview/9n58qrw40dfw). 
+- Download the latest Microsoft Performance Toolkit Apple [Releases](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/releases)
+- Extract the Microsoft-Performance-Tools-Apple.zip
+- Open WPA UI and click Install Plugin
+![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
+- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.0.ptix"
+
+- Copy captured and exported trace <tracefile.xml> from you Mac device to your Windows machine and open it with the WPA.
 
 ![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
 
