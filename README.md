@@ -63,6 +63,10 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
 
+## How to capture a Trace and Open in WPA:
+
+![](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/doc/IoSTracing_example.gif)
+
 # Developer Prerequisites
 
 ## Runtime prereqs
