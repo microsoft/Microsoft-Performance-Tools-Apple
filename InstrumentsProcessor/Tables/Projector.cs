@@ -59,7 +59,7 @@ namespace InstrumentsProcessor.Tables
 
         public static string DeviceSessionProjector(Process process)
         {
-            return process?.DeviceSession.Value ?? "Unknown";
+            return process?.DeviceSession?.Value ?? "Unknown";
         }
 
         public static string CpuProjector(TimeProfileEvent e)
