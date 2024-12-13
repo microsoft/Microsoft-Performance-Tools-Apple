@@ -29,7 +29,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
 
         public T Deserialize(XmlNode node, ObjectCache cache)
         {
-            if (node.Name == "sentinel")
+            if (node == null || node.Name == "sentinel")
             {
                 return default;
             }

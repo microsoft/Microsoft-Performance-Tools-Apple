@@ -16,7 +16,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
         {
             if (property.Name == "Value")
             {
-                return int.Parse(node.InnerText); ;
+                return int.Parse(node.InnerText);
             }
             else
             {
