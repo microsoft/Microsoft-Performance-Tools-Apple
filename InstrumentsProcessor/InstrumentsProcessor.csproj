@@ -2,17 +2,17 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-	<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-	<Authors>Microsoft</Authors>
-	<Company>Microsoft Corp.</Company>
-	<Product>Performance ToolKit</Product>
-  <Version>1.0.1</Version>
-	<Description>Contains the Apple Perf Xml Data datasource plugin.</Description>
-	<PackageId>Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor</PackageId>
-	<Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
-	<RepositoryUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</RepositoryUrl>
-	<PackageProjectUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</PackageProjectUrl>
-	<PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Microsoft</Authors>
+    <Company>Microsoft Corp.</Company>
+    <Product>Performance ToolKit</Product>
+    <Version>1.0.1</Version>
+    <Description>Contains the Apple Perf Xml Data datasource plugin.</Description>
+    <PackageId>Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor</PackageId>
+    <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
+    <RepositoryUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/microsoft/Microsoft-Performance-Tools-Apple</PackageProjectUrl>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
