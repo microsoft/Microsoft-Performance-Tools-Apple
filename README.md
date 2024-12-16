@@ -57,7 +57,7 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 - Extract the Microsoft-Performance-Tools-Apple.zip
 - Open WPA UI and click Install Plugin
 ![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
-- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.0.ptix"
+- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.1.ptix"
 
 - Copy captured and exported trace <tracefile.xml> from you Mac device to your Windows machine and open it with the WPA.
 
