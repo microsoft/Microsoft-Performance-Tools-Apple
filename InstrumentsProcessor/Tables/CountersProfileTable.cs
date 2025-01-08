@@ -108,6 +108,24 @@ namespace InstrumentsProcessor.Tables
                 CellFormat = TimestampFormatter.FormatMillisecondsGrouped
             });
 
+        private static readonly ColumnConfiguration columnOneColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("1B5EAEB9-0ADF-49E9-8850-FF676DDF4DFD"), "Col1"),
+            new UIHints
+            {
+                IsVisible = true,
+                AggregationMode = AggregationMode.Sum,
+                Width = 100,
+            });
+
+        private static readonly ColumnConfiguration columnTwoColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("84D78E73-54F6-4735-AFC8-49BF646B4BE1"), "Col2"),
+            new UIHints
+            {
+                IsVisible = true,
+                AggregationMode = AggregationMode.Sum,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration countPreset = new ColumnConfiguration(
             new ColumnMetadata(new Guid("CA3DB955-E194-4790-8EBB-A5B630376189"), "Count"),
             new UIHints
@@ -166,6 +184,8 @@ namespace InstrumentsProcessor.Tables
             var moduleProjection = stackProjection.Compose(Projector.ModuleProjector);
             var functionProjection = stackProjection.Compose(Projector.FunctionProjector);
             var weightProjection = baseProjection.Compose(Projector.WeightProjector);
+            var columnOneProjection = baseProjection.Compose(Projector.ColumnOneProjector);
+            var columnTwoProjection = baseProjection.Compose(Projector.ColumnTwoProjector);
 
             var startTimeProjection = Projection.Select(timeStampProjection, weightProjection, new ReduceTimeMinusDelta());
             var viewportClippedStartTimeProjection =
@@ -186,6 +206,8 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
             tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
+            tableBuilderWithRowCount.AddColumn(columnOneColumn, columnOneProjection);
+            tableBuilderWithRowCount.AddColumn(columnTwoColumn, columnTwoProjection);
             tableBuilderWithRowCount.AddHierarchicalColumn(stackColumn,
                     stackProjection, new StackAccessProvider());
             tableBuilderWithRowCount.AddColumn(moduleColumn, moduleProjection);
@@ -202,6 +224,8 @@ namespace InstrumentsProcessor.Tables
                     stackColumn,
                     TableConfiguration.PivotColumn,
                     countPreset,
+                    columnOneColumn,
+                    columnTwoColumn,
                     weightViewportPreset,
                     timeStampColumn,
                     TableConfiguration.GraphColumn,

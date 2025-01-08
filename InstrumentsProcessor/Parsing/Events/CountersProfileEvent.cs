@@ -38,6 +38,6 @@ namespace InstrumentsProcessor.Parsing.Events
         public TimestampDelta Weight { get; set; }
 
         [Column("Counter Value Array", "pmc-events")]
-        public String CounterValueArray { get; set; }
+        public PmcEvents CounterValueArray { get; set; }
     }
 }
