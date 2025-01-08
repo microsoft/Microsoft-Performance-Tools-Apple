@@ -461,5 +461,58 @@ namespace InstrumentsProcessor.Tables
         {
             return e.Event.Value;
         }
+
+        public static Timestamp TimeStampProjector(CountersProfileEvent e)
+        {
+            return e.SampleTime.Value;
+        }
+
+        public static Thread ThreadProjector(CountersProfileEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static Process ProcessProjector(CountersProfileEvent e)
+        {
+            return e.Process;
+        }
+
+        public static string CpuProjector(CountersProfileEvent e)
+        {
+            if (e.Core == null)
+            {
+                return "Unknown";
+            }
+
+            Regex regex = new Regex(@"CPU (\d+)");
+            Match match = regex.Match(e.Core.Value);
+
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+
+            return "Unknown";
+        }
+
+        public static Backtrace StackProjector(CountersProfileEvent e)
+        {
+            return e.Backtrace;
+        }
+
+        public static TimestampDelta WeightProjector(CountersProfileEvent e)
+        {
+            return e.Weight.Value;
+        }
+
+        public static long ColumnOneProjector(CountersProfileEvent e)
+        {
+            return e.CounterValueArray?.ColumnOne ?? 0;
+        }
+
+        public static long ColumnTwoProjector(CountersProfileEvent e)
+        {
+            return e.CounterValueArray?.ColumnTwo ?? 0;
+        }
     }
 }

@@ -29,7 +29,8 @@ namespace InstrumentsProcessor.Parsing
             new EventDeserializer<PotentialHangEvent>(),
             new EventDeserializer<CpuProfileEvent>(),
             new EventDeserializer<MetalGpuIntervalEvent>(),
-            new EventDeserializer<DisplayVsyncIntervalEvent>()
+            new EventDeserializer<DisplayVsyncIntervalEvent>(),
+            new EventDeserializer<CountersProfileEvent>(),
         });
 
         private ParsingContext context;
