@@ -8,16 +8,22 @@ using System;
 using System.Xml;
 using System.IO;
 using System.Xml.Serialization;
-using InstrumentsProcessor.Parsing.Events;
-using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Performance.SDK;
+using System.Diagnostics;
+using System.Text;
+using InstrumentsProcessor.Parsing.Events;
 
 namespace InstrumentsProcessor.Parsing
 {
     public sealed class TraceSourceParser
         : SourceParser<Event, ParsingContext, Type>
     {
+        private static readonly string TraceQueryResultName = "trace-query-result";
+        private static readonly string NodeName = "node";
+        private static readonly string SchemaName = "schema";
+        private static readonly string RowName = "row";
+
         private static readonly EventDeserializerProvider eventDeserializerProvider = new EventDeserializerProvider(new IEventDeserializer[]
         {
             new EventDeserializer<TimeProfileEvent>(),
@@ -53,60 +59,12 @@ namespace InstrumentsProcessor.Parsing
 
         public override void ProcessSource(ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, ILogger logger, IProgress<int> progress, CancellationToken cancellationToken)
         {
-            int totalRows = 0;
-
-            foreach (IDataSource dataSource in this.dataSources)
-            {
-                totalRows += GetRowCount(dataSource);
-            }
-
             Timestamp? firstEventTimestamp = null;
             Timestamp? lastEventTimestamp = null;
-            int rowCount = 0;
 
-            foreach (IDataSource dataSource in this.dataSources)
+            foreach (IDataSource dataSource in dataSources)
             {
-                foreach (XmlNode node in GetNodesToProcess(dataSource))
-                {
-                    ObjectCache cache = new ObjectCache();
-                    Schema schema;
-
-                    using (StringReader reader = new StringReader(node.FirstChild.OuterXml))
-                    {
-                        XmlSerializer serializer = new XmlSerializer(typeof(Schema));
-                        schema = (Schema)serializer.Deserialize(reader);
-                    }
-
-                    if (!eventDeserializerProvider.TryGetDeserializer(schema, out IEventDeserializer eventDeserializer))
-                    {
-                        continue;
-                    }
-
-                    foreach (XmlNode childNode in node.ChildNodes)
-                    {
-                        if (childNode.Name != "row")
-                        {
-                            continue;
-                        }
-
-                        Event e = eventDeserializer.Deserialize(childNode, cache, schema);
-
-                        dataProcessor.ProcessDataElement(e, this.context, cancellationToken);
-
-                        if (firstEventTimestamp == null || firstEventTimestamp.Value > e.Timestamp)
-                        {
-                            firstEventTimestamp = e.Timestamp;
-                        }
-
-                        if (lastEventTimestamp == null || lastEventTimestamp.Value < e.Timestamp)
-                        {
-                            lastEventTimestamp = e.Timestamp;
-                        }
-
-                        rowCount++;
-                        progress.Report((int)(rowCount / (double)totalRows * 100));
-                    }
-                }
+                ProcessDataSource(dataSource, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, progress, cancellationToken);
             }
 
             long firstEventTimestampNanoseconds = firstEventTimestamp.HasValue ? firstEventTimestamp.Value.ToNanoseconds : 0;
@@ -115,58 +73,91 @@ namespace InstrumentsProcessor.Parsing
             dataSourceInfo = new DataSourceInfo(firstEventTimestampNanoseconds, lastEventTimestampnanoseconds, firstEventWallClockUtc);
         }
 
-        private static IEnumerable<XmlNode> GetNodesToProcess(IDataSource dataSource)
+        public void ProcessDataSource(IDataSource dataSource, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
+            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, IProgress<int> progress, CancellationToken cancellationToken)
         {
             if (!(dataSource is FileDataSource fileDataSource))
             {
-                yield break;
+                return;
             }
 
-            XmlDocument doc = GetXmlDocument(fileDataSource);
+            XmlReader reader = GetXmlReader(fileDataSource, progress);
+            reader.ReadToDescendant(TraceQueryResultName);
 
-            if (doc.ChildNodes.Count != 2 ||
-                doc.ChildNodes[1].Name != "root")
+            while (reader.Name == TraceQueryResultName)
             {
-                yield break;
-            }
-
-            XmlNode root = doc.ChildNodes[1];
-
-            foreach (XmlNode traceQueryResult in root.ChildNodes)
-            {
-                if (traceQueryResult.Name == "trace-query-result" &&
-                    traceQueryResult.ChildNodes.Count == 1 &&
-                    traceQueryResult.ChildNodes[0].Name == "node")
+                if (reader.ReadToDescendant(NodeName))
                 {
-                    yield return traceQueryResult.ChildNodes[0];
+                    XmlReader subtree = reader.ReadSubtree();
+                    ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken);
+                    subtree.Close();
+                    reader.Read();
+                }
+                
+                reader.Read();
+            }
+        }
+
+        public void ProcessNode(XmlReader reader, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
+            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, CancellationToken cancellationToken)
+        {
+            if (!reader.ReadToDescendant(SchemaName))
+            {
+                return;
+            }
+
+            ObjectCache cache = new ObjectCache();
+            Schema schema = (Schema)new XmlSerializer(typeof(Schema)).Deserialize(reader);
+
+            if (!eventDeserializerProvider.TryGetDeserializer(schema, out IEventDeserializer eventDeserializer))
+            {
+                return;
+            }
+
+            XmlDocument doc = new XmlDocument();
+
+            while (reader.Name == RowName)
+            {
+                XmlNode rowNode = doc.ReadNode(reader);
+                Event e = eventDeserializer.Deserialize(rowNode, cache, schema);
+
+                dataProcessor.ProcessDataElement(e, context, cancellationToken);
+
+                if (firstEventTimestamp == null || firstEventTimestamp.Value > e.Timestamp)
+                {
+                    firstEventTimestamp = e.Timestamp;
+                }
+
+                if (lastEventTimestamp == null || lastEventTimestamp.Value < e.Timestamp)
+                {
+                    lastEventTimestamp = e.Timestamp;
                 }
             }
         }
 
-        private static int GetRowCount(IDataSource dataSource)
+        private static XmlReader GetXmlReader(FileDataSource fileDataSource, IProgress<int> progress)
         {
-            int rowCount = 0;
+            // Create a stream to read the XML file that removes XML declarations, wraps everything in a single root element, and reports progress
+            Stream stream = new CompositeStream(
+                new List<Stream>
+                {
+                    new MemoryStream(Encoding.UTF8.GetBytes("<root>")),
+                    new FilterStream(
+                        new ProgressStream(
+                            new FileStream(fileDataSource.FullPath, FileMode.Open, FileAccess.Read),
+                            new FileInfo(fileDataSource.FullPath).Length,
+                            progress),
+                        new List<byte[]> { Encoding.UTF8.GetBytes("<?xml version=\"1.0\"?>") }),
+                    new MemoryStream(Encoding.UTF8.GetBytes("</root>"))
+                });
 
-            foreach (XmlNode node in GetNodesToProcess(dataSource))
+            XmlReaderSettings settings = new XmlReaderSettings
             {
-                rowCount += node.ChildNodes.Count - 1;
-            }
+                IgnoreWhitespace = true,
+                DtdProcessing = DtdProcessing.Ignore
+            };
 
-            return rowCount;
-        }
-
-        private static XmlDocument GetXmlDocument(FileDataSource fileDataSource)
-        {
-            string xmlContent = File.ReadAllText(fileDataSource.FullPath);
-
-            // Remove all <?xml version="1.0"?> declarations except the first one
-            string cleanedXmlContent = Regex.Replace(xmlContent, @"<\?xml version=""1.0""\?>", "", RegexOptions.Multiline);
-            cleanedXmlContent = "<?xml version=\"1.0\"?><root>" + cleanedXmlContent + "</root>";
-
-            XmlDocument doc = new XmlDocument();
-            doc.LoadXml(cleanedXmlContent);
-
-            return doc;
+            return XmlReader.Create(stream, settings);
         }
     }
 }
