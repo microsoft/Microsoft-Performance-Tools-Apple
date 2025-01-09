@@ -59,11 +59,8 @@ namespace InstrumentsProcessor.Parsing
 
         public override void ProcessSource(ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, ILogger logger, IProgress<int> progress, CancellationToken cancellationToken)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-
             Timestamp? firstEventTimestamp = null;
             Timestamp? lastEventTimestamp = null;
-            int rowCount = 0;
 
             foreach (IDataSource dataSource in dataSources)
             {
@@ -140,8 +137,6 @@ namespace InstrumentsProcessor.Parsing
 
         private static XmlReader GetXmlReader(FileDataSource fileDataSource, IProgress<int> progress)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-
             // Create a stream to read the XML file that removes XML declarations, wraps everything in a single root element, and reports progress
             Stream stream = new CompositeStream(
                 new List<Stream>
