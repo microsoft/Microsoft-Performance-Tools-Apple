@@ -87,13 +87,16 @@ namespace InstrumentsProcessor.Parsing
             XmlReader reader = GetXmlReader(fileDataSource, progress);
             reader.ReadToDescendant(TraceQueryResultName);
 
-            while (reader.Name == TraceQueryResultName &&
-                reader.ReadToDescendant(NodeName))
+            while (reader.Name == TraceQueryResultName)
             {
-                XmlReader subtree = reader.ReadSubtree();
-                ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken);
-                subtree.Close();
-                reader.Read();
+                if (reader.ReadToDescendant(NodeName))
+                {
+                    XmlReader subtree = reader.ReadSubtree();
+                    ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken);
+                    subtree.Close();
+                    reader.Read();
+                }
+                
                 reader.Read();
             }
         }
