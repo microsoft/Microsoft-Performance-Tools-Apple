@@ -3,10 +3,12 @@
 
 using InstrumentsProcessor.AccessProviders;
 using InstrumentsProcessor.Cookers;
+using InstrumentsProcessor.Parsing.DataModels;
 using InstrumentsProcessor.Parsing.Events;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
+using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
 
@@ -140,6 +142,20 @@ namespace InstrumentsProcessor.Tables
                 AggregationMode = AggregationMode.Sum
             });
 
+        private static readonly ColumnVariantProperties baseProperties = new ColumnVariantProperties()
+        {
+            Label = "Stack frames",
+            ColumnName = "Stack",
+        };
+
+        private static ColumnVariantDescriptor invertedDescriptor = new ColumnVariantDescriptor(
+                new Guid("13a5ed0c-1591-4210-8fc2-147e1aba2d82"),
+                new ColumnVariantProperties
+                {
+                    Label = "Invert",
+                    ColumnName = $"{baseProperties.ColumnName} (Inverted)",
+                });
+
         //
         // This method, with this exact signature, is required so that the runtime can 
         // build your table once all cookers have processed their data.
@@ -153,6 +169,7 @@ namespace InstrumentsProcessor.Tables
                 requiredData.QueryOutput<List<VirtualMemoryEvent>>(new DataOutputPath(VirtualMemoryCooker.DataCookerPath, nameof(VirtualMemoryCooker.VirtualMemoryEvents)));
 
             ITableBuilderWithRowCount tableBuilderWithRowCount = tableBuilder.SetRowCount(data.Count);
+            StackAccessProvider stackAccessProvider = new StackAccessProvider();
 
             var baseProjection = Projection.Index(data);
 
@@ -182,8 +199,20 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(waitTimeColumn, waitTimeProjection);
             tableBuilderWithRowCount.AddColumn(addressColumn, addressProjection);
             tableBuilderWithRowCount.AddColumn(sizeColumn, sizeProjection);
-            tableBuilderWithRowCount.AddHierarchicalColumn(stackColumn,
-                    stackProjection, new StackAccessProvider());
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
+                stackProjection, stackAccessProvider, builder =>
+                {
+                    return builder
+                        .WithModes(
+                            baseProperties,
+                            modeBuilder =>
+                            {
+                                return modeBuilder.WithHierarchicalToggle(
+                                    invertedDescriptor,
+                                    stackProjection,
+                                    new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccessProvider));
+                            });
+                });
             tableBuilderWithRowCount.AddColumn(countPreset, Projection.Constant(1));
 
             var tableConfig = new TableConfiguration("Memory by Process, Stack")

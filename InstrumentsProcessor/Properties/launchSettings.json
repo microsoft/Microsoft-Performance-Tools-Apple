@@ -2,8 +2,11 @@
   "profiles": {
     "InstrumentsProcessor": {
       "commandName": "Executable",
-      "executablePath": "D:\\WPA_FOR_XPERF\\analyzer\\wpa\\bin\\x64\\Debug\\net8.0-windows\\win-x64\\wpa.exe",
-      "commandLineArgs": "-nodefault -addsearchdir D:\\Microsoft-Performance-Tools-Apple\\InstrumentsProcessor\\bin\\Debug\\netstandard2.0"
+      "executablePath": "C:\\Work\\WPA_FOR_XPERF\\analyzer\\wpa\\internal\\bin\\Debug\\net8.0-windows\\win-x64\\wpa.exe",
+      "commandLineArgs": "-nodefault -addsearchdir \"C:\\Work\\Microsoft-Performance-Tools-Apple\\Microsoft-Performance-Tools-Apple\\InstrumentsProcessor\\bin\\Debug\\net5.0\"",
+      "nativeDebugging": true,
+      "jsWebView2Debugging": false,
+      "remoteDebugEnabled": false
     }
   }
 }
