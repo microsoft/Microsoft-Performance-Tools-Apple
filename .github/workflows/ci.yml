@@ -38,12 +38,12 @@ jobs:
       run: dotnet test Microsoft-Performance-Tools-Apple.sln --no-restore --verbosity normal
 
     - name: Install PluginTool
-      run: dotnet tool install --global Microsoft.Performance.Toolkit.Plugins.Cli --version 0.1.25-preview      
+      run: dotnet tool install --global Microsoft.Performance.Toolkit.Plugins.Cli --version 0.1.57-preview      
 
     - name: Create PTIX
       run: |
         $dirs = @{
-          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/net5.0/"
         }
 
         foreach ($plugin in $dirs.Keys) {
@@ -68,7 +68,7 @@ jobs:
     - name: Copy files and prepare artifacts
       run: |
         $dirs = @{
-          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/net5.0/"
         }
 
         foreach ($dir in $dirs.Keys) {
