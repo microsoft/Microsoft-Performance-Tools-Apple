@@ -34,6 +34,11 @@ namespace InstrumentsProcessor.AccessProviders
 
         public int GetCount(Backtrace collection)
         {
+            if (collection == null || collection.Frames == null)
+            {
+                return 0;
+            }
+
             return collection.Frames.Count;
         }
 
@@ -55,7 +60,7 @@ namespace InstrumentsProcessor.AccessProviders
 
         public string GetValue(Backtrace collection, int index)
         {
-            if (collection == null )
+            if (collection == null || collection.Frames.Count == 0)
             {
                 return "NA!NA";
             }

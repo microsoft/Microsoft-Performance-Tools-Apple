@@ -7,8 +7,12 @@ using InstrumentsProcessor.Parsing.Events;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
+using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
+
+using Backtrace = InstrumentsProcessor.Parsing.DataModels.Backtrace;
+
 
 namespace InstrumentsProcessor.Tables
 {
@@ -156,6 +160,20 @@ namespace InstrumentsProcessor.Tables
                 CellFormat = "N2",
             });
 
+        private static readonly ColumnVariantProperties baseProperties = new ColumnVariantProperties()
+        {
+            Label = "Stack frames",
+            ColumnName = "Stack",
+        };
+
+        private static ColumnVariantDescriptor invertedDescriptor = new ColumnVariantDescriptor(
+                new Guid("6d73c485-6fcc-441b-88da-6051de689f6b"),
+                new ColumnVariantProperties
+                {
+                    Label = "Invert",
+                    ColumnName = $"{baseProperties.ColumnName} (Inverted)",
+                });
+
         //
         // This method, with this exact signature, is required so that the runtime can 
         // build your table once all cookers have processed their data.
@@ -167,7 +185,7 @@ namespace InstrumentsProcessor.Tables
         {
             List<CountersProfileEvent> data =
                 requiredData.QueryOutput<List<CountersProfileEvent>>(new DataOutputPath(CountersProfileCooker.DataCookerPath, nameof(CountersProfileCooker.CountersProfileEvent)));
-
+            StackAccessProvider stackAccessProvider = new StackAccessProvider();
             ITableBuilderWithRowCount tableBuilderWithRowCount = tableBuilder.SetRowCount(data.Count);
 
             var baseProjection = Projection.Index(data);
@@ -186,7 +204,6 @@ namespace InstrumentsProcessor.Tables
             var weightProjection = baseProjection.Compose(Projector.WeightProjector);
             var columnOneProjection = baseProjection.Compose(Projector.ColumnOneProjector);
             var columnTwoProjection = baseProjection.Compose(Projector.ColumnTwoProjector);
-
             var startTimeProjection = Projection.Select(timeStampProjection, weightProjection, new ReduceTimeMinusDelta());
             var viewportClippedStartTimeProjection =
                 Projection.ClipTimeToVisibleDomain.Create(startTimeProjection);
@@ -208,8 +225,20 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
             tableBuilderWithRowCount.AddColumn(columnOneColumn, columnOneProjection);
             tableBuilderWithRowCount.AddColumn(columnTwoColumn, columnTwoProjection);
-            tableBuilderWithRowCount.AddHierarchicalColumn(stackColumn,
-                    stackProjection, new StackAccessProvider());
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
+                    stackProjection, stackAccessProvider, builder =>
+                    {
+                        return builder
+                            .WithModes(
+                                baseProperties,
+                                modeBuilder =>
+                                {
+                                    return modeBuilder.WithHierarchicalToggle(
+                                        invertedDescriptor,
+                                        stackProjection,
+                                        new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccessProvider));
+                                });
+                    });
             tableBuilderWithRowCount.AddColumn(moduleColumn, moduleProjection);
             tableBuilderWithRowCount.AddColumn(functionColumn, functionProjection);
             tableBuilderWithRowCount.AddColumn(countPreset, Projection.Constant(1));

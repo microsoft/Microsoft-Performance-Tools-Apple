@@ -7,8 +7,11 @@ using InstrumentsProcessor.Parsing.Events;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
+using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
+
+using Backtrace = InstrumentsProcessor.Parsing.DataModels.Backtrace;
 
 namespace InstrumentsProcessor.Tables
 {
@@ -144,7 +147,8 @@ namespace InstrumentsProcessor.Tables
             });
 
         private static readonly ColumnConfiguration weightPercentPreset = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("f93f3441-5ac0-4447-a2d0-776f62d9f5cf"), "% Weight") { IsPercent = true, ShortDescription = "Weight is expressed as a percentage of total CPU time that is spent over the currently visible time range" },
+            new ColumnMetadata(new Guid("f93f3441-5ac0-4447-a2d0-776f62d9f5cf"), "% Weight") { IsPercent = true,
+                ShortDescription = "Weight is expressed as a percentage of total CPU time that is spent over the currently visible time range" },
             new UIHints
             {
                 IsVisible = true,
@@ -153,6 +157,20 @@ namespace InstrumentsProcessor.Tables
                 SortOrder = SortOrder.Descending,
                 CellFormat = "N2",
             });
+
+        private static readonly ColumnVariantProperties baseProperties = new ColumnVariantProperties()
+        {
+            Label = "Stack frames",
+            ColumnName = "Stack",
+        };
+
+        private static ColumnVariantDescriptor invertedDescriptor = new ColumnVariantDescriptor(
+                new Guid("94b3e830-d188-451a-96fc-694dfe49f01f"),
+                new ColumnVariantProperties
+                {
+                    Label = "Invert",
+                    ColumnName = $"{baseProperties.ColumnName} (Inverted)",
+                });
 
         //
         // This method, with this exact signature, is required so that the runtime can 
@@ -167,7 +185,7 @@ namespace InstrumentsProcessor.Tables
                 requiredData.QueryOutput<List<TimeProfileEvent>>(new DataOutputPath(TimeProfileCooker.DataCookerPath, nameof(TimeProfileCooker.TimeProfileEvents)));
 
             ITableBuilderWithRowCount tableBuilderWithRowCount = tableBuilder.SetRowCount(data.Count);
-
+            StackAccessProvider stackAccessProvider = new StackAccessProvider();
             var baseProjection = Projection.Index(data);
 
             var timeStampProjection = baseProjection.Compose(Projector.TimeStampProjector);
@@ -206,8 +224,20 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(processorClassColumn, processorClassProjection);
             tableBuilderWithRowCount.AddColumn(stateColumn, stateProjection);
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
-            tableBuilderWithRowCount.AddHierarchicalColumn(stackColumn,
-                    stackProjection, new StackAccessProvider());
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
+                stackProjection, stackAccessProvider, builder =>
+                {
+                    return builder
+                        .WithModes(
+                            baseProperties,
+                            modeBuilder =>
+                            {
+                                return modeBuilder.WithHierarchicalToggle(
+                                    invertedDescriptor,
+                                    stackProjection,
+                                    new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccessProvider));
+                            });
+                });
             tableBuilderWithRowCount.AddColumn(moduleColumn, moduleProjection);
             tableBuilderWithRowCount.AddColumn(functionColumn, functionProjection);
             tableBuilderWithRowCount.AddColumn(countPreset, Projection.Constant(1));
