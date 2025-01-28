@@ -43,7 +43,7 @@ jobs:
     - name: Create PTIX
       run: |
         $dirs = @{
-          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/netstandard2.0/"
+          "InstrumentsProcessor" = "InstrumentsProcessor/bin/Release/net5.0/"
         }
 
         foreach ($plugin in $dirs.Keys) {
