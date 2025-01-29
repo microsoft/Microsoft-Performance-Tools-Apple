@@ -67,6 +67,33 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ![](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/doc/IoSTracing_example.gif)
 
+
+## Examples:
+
+Capture a trace with 1 million instruction samples and attach Cycle Delta to that event. Also, add Time Profile to sample the running thread on the CPU every 1 ms. This profile can be used to calculate frequency, as well as instruction and cycle-level analysis.
+
+First, open Instruments and create a new session, then choose Blank.
+
+<img width="789" alt="1" src="https://github.com/user-attachments/assets/7af3ff47-65fe-4fc1-a66a-22369116f84a" />
+
+
+From the open window, select +Instruments (see step 2) and find CPU Counters and Time Profile from the opened menu (see step 3).
+
+
+<img width="818" alt="2" src="https://github.com/user-attachments/assets/ab99ead0-9c59-4074-8f84-39dfab3b977e" />
+
+
+For CPU Counters, use Event-Based Sampling to collect a sample every 1 million instructions (see step 2) and attach Cycle (see step 3) to that. Then, in Record Settings, choose Deferred (see step 4).
+
+
+<img width="1500" alt="3" src="https://github.com/user-attachments/assets/252f036a-810a-481d-9795-621222b93cdc" />
+
+Capture the trace and save it. Then run:
+`./trace-export.sh --input <tracefile.trace>`
+to export it for WPA.
+
+You can find the template here: 
+
 # Developer Prerequisites
 
 ## Runtime prereqs
