@@ -93,6 +93,8 @@ Capture the trace and save it. Then run:
 to export it for WPA.
 
 You can find the template here: 
+`TraceTemplate\CPUCounterWithTimeProfile.tracetemplate`
+
 
 # Developer Prerequisites
 
