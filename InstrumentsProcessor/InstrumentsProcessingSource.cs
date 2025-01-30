@@ -5,6 +5,7 @@ using InstrumentsProcessor.Parsing;
 using Microsoft.Performance.SDK.Processing;
 using System;
 using System.Collections.Generic;
+using static System.Net.WebRequestMethods;
 
 namespace InstrumentsProcessor
 {
@@ -71,8 +72,16 @@ namespace InstrumentsProcessor
                     },
                 },
             },
-                LicenseInfo = null,
-                ProjectInfo = null,
+                LicenseInfo = new LicenseInfo()
+                {
+                    Name = "MIT",
+                    Uri = "https://mit-license.org/",
+                    Text = "The MIT License (MIT)"
+                },
+                ProjectInfo = new ProjectInfo()
+                {
+                    Uri = "https://github.com/microsoft/Microsoft-Performance-Tools-Apple"
+                },
                 CopyrightNotice = $"Copyright (C) {DateTime.Now.Year}",
                 AdditionalInformation = null,
             };
