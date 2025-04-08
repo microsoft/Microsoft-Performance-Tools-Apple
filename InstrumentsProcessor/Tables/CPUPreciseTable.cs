@@ -104,6 +104,14 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
+        private static readonly ColumnConfiguration priorityColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("a71cc240-2c24-48bc-aa38-3720600c9ec9"), "Priority"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration cpuTimeColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("d2be4eba-6714-4c45-bf8d-9cd626729f5f"), "CPU Time"),
             new UIHints
@@ -198,6 +206,7 @@ namespace InstrumentsProcessor.Tables
             var processNameProjection = processProjection.Compose(Projector.ProcessNameProjector);
             var deviceSessionProjection = processProjection.Compose(Projector.DeviceSessionProjector);
             var cpuProjection = baseProjection.Compose(Projector.CpuProjector);
+            var priorityProjection = baseProjection.Compose(Projector.PriorityProjector);
             var cpuTimeProjection = baseProjection.Compose(Projector.CpuTimeProjector);
             var waitTimeProjection = baseProjection.Compose(Projector.WaitTimeProjector);
             var noteProjection = baseProjection.Compose(Projector.NoteProjector);
@@ -224,6 +233,7 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
             tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
+            tableBuilderWithRowCount.AddColumn(priorityColumn, priorityProjection);
             tableBuilderWithRowCount.AddColumn(cpuTimeColumn, cpuTimeProjection);
             tableBuilderWithRowCount.AddColumn(waitTimeColumn, waitTimeProjection);
             tableBuilderWithRowCount.AddColumn(noteColumn, noteProjection);
