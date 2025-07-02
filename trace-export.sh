@@ -37,6 +37,8 @@ echo "Output file is: $output_file"
 
 xctrace export --input $input_file --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' > $output_file
 
+xctrace export --input $input_file --toc | xmllint --xpath '//info' - > $output_file
+
 schemas=(
     "counters-profile"
     "thread-state"
