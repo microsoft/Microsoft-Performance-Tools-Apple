@@ -17,7 +17,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public string Architecture { get; private set; }
 
-        public object DeserializeProperty(XmlNode node, ObjectCache cache, System.Reflection.PropertyInfo property)
+        public object DeserializeProperty(XmlNode node, XmlParsingContext context, System.Reflection.PropertyInfo property)
         {
             if (property.Name == "Name")
             {

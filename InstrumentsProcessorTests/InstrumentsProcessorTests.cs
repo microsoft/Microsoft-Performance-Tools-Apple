@@ -6,6 +6,7 @@ using System.Reflection;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
 using Microsoft.Performance.SDK;
+using System.Linq;
 
 namespace InstrumentsProcessorTests
 {
@@ -13,6 +14,7 @@ namespace InstrumentsProcessorTests
     {
         private static List<DataCookerPath> DataCookerPaths = new List<DataCookerPath>() 
         {
+            InstrumentsProcessor.Cookers.CountersProfileCooker.DataCookerPath,
             InstrumentsProcessor.Cookers.CpuProfileCooker.DataCookerPath,
             InstrumentsProcessor.Cookers.DeviceThermalStateIntervalCooker.DataCookerPath,
             InstrumentsProcessor.Cookers.DisplayVsyncIntervalCooker.DataCookerPath,
@@ -27,6 +29,7 @@ namespace InstrumentsProcessorTests
 
         private static List<TableDescriptor> TableDescriptors = new List<TableDescriptor>()
         {
+            InstrumentsProcessor.Tables.CountersProfileTable.TableDescriptor,
             InstrumentsProcessor.Tables.CPUPreciseTable.TableDescriptor,
             InstrumentsProcessor.Tables.CPUProfiletable.TableDescriptor,
             InstrumentsProcessor.Tables.CpuSamplingTable.TableDescriptor,
@@ -44,6 +47,7 @@ namespace InstrumentsProcessorTests
         [InlineData(@"TestData\system_trace")]
         [InlineData(@"TestData\trace_memory")]
         [InlineData(@"TestData\trace_thermal")]
+        [InlineData(@"TestData\cache")]
         public void BaselineTest(string inputFilePathWithoutFileExtension)
         {
             string inputFilePath = inputFilePathWithoutFileExtension + ".xml";

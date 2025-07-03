@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Xml;
 
@@ -9,29 +10,43 @@ namespace InstrumentsProcessor.Parsing.DataModels
 {
     public class PmcEvents : IPropertyDeserializer
     {
+        /// <summary>
+        /// Dictionary that can be indexed by counter name (string)
+        /// </summary>
         [CustomDeserialization]
-        public long ColumnOne { get; private set; }
+        public Dictionary<string, long> CounterValues { get; private set; } = new Dictionary<string, long>();
 
-        [CustomDeserialization]
-        public long ColumnTwo { get; private set; }
-
-        public object DeserializeProperty(XmlNode node, ObjectCache cache, PropertyInfo property)
+        public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
-            if (property.Name == "ColumnOne")
+            if (property.Name == "CounterValues")
             {
+                // Parse the counter values from the node
                 string[] array = node.InnerText.Split(' ');
 
-                return array.Length >= 1 ? long.Parse(array[0]) : 0;
-            }
-            else if (property.Name == "ColumnTwo")
-            {
-                string[] array = node.InnerText.Split(' ');
-
-                return array.Length >= 2 ? long.Parse(array[1]) : 0;
+                Dictionary<string, long> counterValues = new Dictionary<string, long>();
+                
+                // Store values by both name and index
+                for (int i = 0; i < array.Length; i++)
+                {
+                    if (long.TryParse(array[i], out long value))
+                    {
+                        // Store by name if we have counter names
+                        if (i < context.CounterNames.Count)
+                        {
+                            counterValues[context.CounterNames[i]] = value;
+                        }
+                        else
+                        {
+                            counterValues[$"Column-{i}"] = value;
+                        }
+                    }
+                }
+                
+                return counterValues;
             }
             else
             {
-                throw new InvalidOperationException();
+                throw new InvalidOperationException($"Unknown property: {property.Name}");
             }
         }
     }
