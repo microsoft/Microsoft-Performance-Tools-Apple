@@ -10,6 +10,9 @@ using Microsoft.Performance.SDK.Processing;
 using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 using Backtrace = InstrumentsProcessor.Parsing.DataModels.Backtrace;
 
@@ -112,24 +115,6 @@ namespace InstrumentsProcessor.Tables
                 CellFormat = TimestampFormatter.FormatMillisecondsGrouped
             });
 
-        private static readonly ColumnConfiguration columnOneColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("1B5EAEB9-0ADF-49E9-8850-FF676DDF4DFD"), "Col1"),
-            new UIHints
-            {
-                IsVisible = true,
-                AggregationMode = AggregationMode.Sum,
-                Width = 100,
-            });
-
-        private static readonly ColumnConfiguration columnTwoColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("84D78E73-54F6-4735-AFC8-49BF646B4BE1"), "Col2"),
-            new UIHints
-            {
-                IsVisible = true,
-                AggregationMode = AggregationMode.Sum,
-                Width = 100,
-            });
-
         private static readonly ColumnConfiguration countPreset = new ColumnConfiguration(
             new ColumnMetadata(new Guid("CA3DB955-E194-4790-8EBB-A5B630376189"), "Count"),
             new UIHints
@@ -174,6 +159,70 @@ namespace InstrumentsProcessor.Tables
                     ColumnName = $"{baseProperties.ColumnName} (Inverted)",
                 });
 
+        private static readonly HashSet<Guid> seenGuids = new HashSet<Guid>();
+        private static int lastIndex = 0;
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Security.Cryptography", "CA5354:SHA1CannotBeUsed", Justification = "Not a security related usage - just generating probabilistically unique id to identify a column from its name.")]
+        public static Guid GenerateGuidFromName(string name)
+        {
+            // The algorithm below is following the guidance of http://www.ietf.org/rfc/rfc4122.txt
+            // Create a blob containing a 16 byte number representing the namespace
+            // followed by the unicode bytes in the name.  
+            var bytes = new byte[name.Length * 2 + 16];
+            uint namespace1 = 0x482C2DB2;
+            uint namespace2 = 0xC39047c8;
+            uint namespace3 = 0x87F81A15;
+            uint namespace4 = 0xBFC130FB;
+            // Write the bytes most-significant byte first.  
+            for (int i = 3; 0 <= i; --i)
+            {
+                bytes[i] = (byte)namespace1;
+                namespace1 >>= 8;
+                bytes[i + 4] = (byte)namespace2;
+                namespace2 >>= 8;
+                bytes[i + 8] = (byte)namespace3;
+                namespace3 >>= 8;
+                bytes[i + 12] = (byte)namespace4;
+                namespace4 >>= 8;
+            }
+            // Write out  the name, most significant byte first
+            for (int i = 0; i < name.Length; i++)
+            {
+                bytes[2 * i + 16 + 1] = (byte)name[i];
+                bytes[2 * i + 16] = (byte)(name[i] >> 8);
+            }
+
+            // Compute the Sha1 hash 
+            var sha1 = SHA1.Create(); // CodeQL [SM02196] False positive: this hash is not used for any sort of crytopgraphy :)
+            byte[] hash = sha1.ComputeHash(bytes);
+
+            // Create a GUID out of the first 16 bytes of the hash (SHA-1 create a 20 byte hash)
+            int a = (((((hash[3] << 8) + hash[2]) << 8) + hash[1]) << 8) + hash[0];
+            short b = (short)((hash[5] << 8) + hash[4]);
+            short c = (short)((hash[7] << 8) + hash[6]);
+
+            c = (short)((c & 0x0FFF) | 0x5000);   // Set high 4 bits of octet 7 to 5, as per RFC 4122
+            Guid guid = new Guid(a, b, c, hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+            return guid;
+        }
+
+        public static Guid GetGuidForName(string name)
+        {
+            string nameToUse = name;
+            while (true)
+            {
+                Guid result = GenerateGuidFromName(nameToUse);
+                if (!seenGuids.Contains(result))
+                {
+                    seenGuids.Add(result);
+                    return result;
+                }
+
+                nameToUse = name + lastIndex;
+                ++lastIndex;
+            }
+        }
+
         //
         // This method, with this exact signature, is required so that the runtime can 
         // build your table once all cookers have processed their data.
@@ -202,8 +251,6 @@ namespace InstrumentsProcessor.Tables
             var moduleProjection = stackProjection.Compose(Projector.ModuleProjector);
             var functionProjection = stackProjection.Compose(Projector.FunctionProjector);
             var weightProjection = baseProjection.Compose(Projector.WeightProjector);
-            var columnOneProjection = baseProjection.Compose(Projector.ColumnOneProjector);
-            var columnTwoProjection = baseProjection.Compose(Projector.ColumnTwoProjector);
             var startTimeProjection = Projection.Select(timeStampProjection, weightProjection, new ReduceTimeMinusDelta());
             var viewportClippedStartTimeProjection =
                 Projection.ClipTimeToVisibleDomain.Create(startTimeProjection);
@@ -216,6 +263,49 @@ namespace InstrumentsProcessor.Tables
             var weightPercentProjection =
                 Projection.VisibleDomainRelativePercent.Create(clippedWeightColumn);
 
+            // Collect all unique counter names from the data
+            var counterNames = new HashSet<object>();
+            foreach (var eventData in data)
+            {
+                if (eventData.CounterValueArray?.CounterValues != null)
+                {
+                    foreach (var key in eventData.CounterValueArray.CounterValues.Keys)
+                    {
+                        counterNames.Add(key);
+                    }
+                }
+            }
+
+            // Sort counter names for consistent ordering (convert to list and sort)
+            var sortedCounterNames = counterNames.ToList();
+            sortedCounterNames.Sort((a, b) => string.Compare(a?.ToString(), b?.ToString(), StringComparison.Ordinal));
+
+            // Create dynamic columns for each counter
+            var dynamicCounterColumns = new List<ColumnConfiguration>();
+            var dynamicCounterProjections = new List<IProjection<int, long>>();
+
+            foreach (var counterName in sortedCounterNames)
+            {
+                string displayName = counterName?.ToString() ?? "Unknown";
+                var counterColumn = new ColumnConfiguration(
+                    new ColumnMetadata(GetGuidForName($"Counter_{displayName}"), displayName),
+                    new UIHints
+                    {
+                        IsVisible = true,
+                        AggregationMode = AggregationMode.Sum,
+                        Width = 100,
+                    });
+
+                // Create a projection for this specific counter
+                var counterProjection = baseProjection.Compose(
+                    new Func<CountersProfileEvent, long>(e => 
+                        e.CounterValueArray?.CounterValues.TryGetValue(counterName, out long value) == true ? value : 0));
+
+                dynamicCounterColumns.Add(counterColumn);
+                dynamicCounterProjections.Add(counterProjection);
+            }
+
+            // Add all standard columns
             tableBuilderWithRowCount.AddColumn(timeStampColumn, timeStampProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
@@ -223,8 +313,13 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
             tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
-            tableBuilderWithRowCount.AddColumn(columnOneColumn, columnOneProjection);
-            tableBuilderWithRowCount.AddColumn(columnTwoColumn, columnTwoProjection);
+
+            // Add dynamic counter columns
+            for (int i = 0; i < dynamicCounterColumns.Count; i++)
+            {
+                tableBuilderWithRowCount.AddColumn(dynamicCounterColumns[i], dynamicCounterProjections[i]);
+            }
+
             tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
                     stackProjection, stackAccessProvider, builder =>
                     {
@@ -245,21 +340,29 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(weightViewportPreset, clippedWeightColumn);
             tableBuilderWithRowCount.AddColumn(weightPercentPreset, weightPercentProjection);
 
+            // Build table configuration with dynamic counter columns
+            var configColumns = new List<ColumnConfiguration>
+            {
+                processNameColumn,
+                stackColumn,
+                TableConfiguration.PivotColumn,
+                countPreset
+            };
+
+            // Add dynamic counter columns to the configuration
+            configColumns.AddRange(dynamicCounterColumns);
+
+            configColumns.AddRange(new[]
+            {
+                weightViewportPreset,
+                timeStampColumn,
+                TableConfiguration.GraphColumn,
+                weightPercentPreset
+            });
+
             var tableConfig = new TableConfiguration("Utilization by Process, Stack")
             {
-                Columns = new[]
-                {
-                    processNameColumn,
-                    stackColumn,
-                    TableConfiguration.PivotColumn,
-                    countPreset,
-                    columnOneColumn,
-                    columnTwoColumn,
-                    weightViewportPreset,
-                    timeStampColumn,
-                    TableConfiguration.GraphColumn,
-                    weightPercentPreset
-                },
+                Columns = configColumns.ToArray(),
             };
 
             tableConfig.AddColumnRole(ColumnRole.StartTime, timeStampColumn);

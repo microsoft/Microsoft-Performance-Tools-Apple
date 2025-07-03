@@ -504,15 +504,5 @@ namespace InstrumentsProcessor.Tables
         {
             return e.Weight.Value;
         }
-
-        public static long ColumnOneProjector(CountersProfileEvent e)
-        {
-            return e.CounterValueArray?.CounterValues.TryGetValue(0, out long value) == true ? value : 0;
-        }
-
-        public static long ColumnTwoProjector(CountersProfileEvent e)
-        {
-            return e.CounterValueArray?.CounterValues.TryGetValue(1, out long value) == true ? value : 0;
-        }
     }
 }
