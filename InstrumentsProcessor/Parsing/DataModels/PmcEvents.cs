@@ -11,7 +11,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
     public class PmcEvents : IPropertyDeserializer
     {
         /// <summary>
-        /// Dictionary that can be indexed by counter name (string) or index (int) 
+        /// Dictionary that can be indexed by counter name (string)
         /// </summary>
         [CustomDeserialization]
         public Dictionary<string, long> CounterValues { get; private set; } = new Dictionary<string, long>();

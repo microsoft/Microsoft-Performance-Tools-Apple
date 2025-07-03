@@ -108,7 +108,7 @@ namespace InstrumentsProcessor.Parsing
                 if (reader.ReadToDescendant(NodeName))
                 {
                     XmlReader subtree = reader.ReadSubtree();
-                    ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken, xmlContext);
+                    ProcessNode(subtree, xmlContext, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken);
                     subtree.Close();
                     reader.Read();
                 }
@@ -117,14 +117,16 @@ namespace InstrumentsProcessor.Parsing
             }
         }
 
-        public void ProcessNode(XmlReader reader, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
-            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, CancellationToken cancellationToken, XmlParsingContext xmlContext)
+        public void ProcessNode(XmlReader reader, XmlParsingContext xmlContext, 
+            ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
+            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, CancellationToken cancellationToken)
         {
             if (!reader.ReadToDescendant(SchemaName))
             {
                 return;
             }
 
+            xmlContext.ObjectCache.Clear();
             Schema schema = (Schema)new XmlSerializer(typeof(Schema)).Deserialize(reader);
 
             if (!eventDeserializerProvider.TryGetDeserializer(schema, out IEventDeserializer eventDeserializer))
