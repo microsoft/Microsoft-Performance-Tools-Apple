@@ -53,7 +53,7 @@ namespace InstrumentsProcessor.Parsing.Events
             return true;
         }
 
-        public Event Deserialize(XmlNode node, ObjectCache cache, Schema schema)
+        public Event Deserialize(XmlNode node, XmlParsingContext context, Schema schema)
         {
             if (node.ChildNodes.Count != schema.Columns.Count)
             {
@@ -81,13 +81,13 @@ namespace InstrumentsProcessor.Parsing.Events
 
                 XmlNode childNode = node.ChildNodes[i];
                 MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-                object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, cache });
+                object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, context });
                 property.SetValue(instance, propertyValue);
 
                 if (childNode.Name == "narrative" || childNode.Name == "formatted-label")
                 {
                     // Try to deserialize top level nodes in dynamic types so we don't miss object definitions
-                    ProcessDynamicType(childNode, cache);
+                    ProcessDynamicType(childNode, context);
                 }
             }
 
@@ -121,14 +121,14 @@ namespace InstrumentsProcessor.Parsing.Events
             }
         }
 
-        private void ProcessDynamicType(XmlNode dynamicNode, ObjectCache cache)
+        private void ProcessDynamicType(XmlNode dynamicNode, XmlParsingContext context)
         {
             foreach (XmlNode childNode in dynamicNode)
             {
                 if (propertyDeserializersByEngineeringType.TryGetValue(childNode.Name, out object deserializer))
                 {
                     MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-                    object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, cache });
+                    object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, context });
                 }
             }
         }

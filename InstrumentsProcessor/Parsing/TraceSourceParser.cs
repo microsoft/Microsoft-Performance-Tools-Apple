@@ -106,7 +106,7 @@ namespace InstrumentsProcessor.Parsing
                 return;
             }
 
-            ObjectCache cache = new ObjectCache();
+            XmlParsingContext xmlContext = new XmlParsingContext();
             Schema schema = (Schema)new XmlSerializer(typeof(Schema)).Deserialize(reader);
 
             if (!eventDeserializerProvider.TryGetDeserializer(schema, out IEventDeserializer eventDeserializer))
@@ -119,7 +119,7 @@ namespace InstrumentsProcessor.Parsing
             while (reader.Name == RowName)
             {
                 XmlNode rowNode = doc.ReadNode(reader);
-                Event e = eventDeserializer.Deserialize(rowNode, cache, schema);
+                Event e = eventDeserializer.Deserialize(rowNode, xmlContext, schema);
 
                 dataProcessor.ProcessDataElement(e, context, cancellationToken);
 

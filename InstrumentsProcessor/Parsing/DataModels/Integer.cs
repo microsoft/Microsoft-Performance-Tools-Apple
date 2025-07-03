@@ -12,7 +12,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public int Value { get; private set; }
 
-        public object DeserializeProperty(XmlNode node, ObjectCache cache, PropertyInfo property)
+        public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Value")
             {
