@@ -24,6 +24,7 @@ namespace InstrumentsProcessor.Parsing
         private static readonly string NodeName = "node";
         private static readonly string SchemaName = "schema";
         private static readonly string RowName = "row";
+        private static readonly string InfoName = "info";
 
         private static readonly EventDeserializerProvider eventDeserializerProvider = new EventDeserializerProvider(new IEventDeserializer[]
         {
@@ -83,12 +84,19 @@ namespace InstrumentsProcessor.Parsing
             }
 
             XmlReader reader = GetXmlReader(fileDataSource, progress);
-            
+
             // Create the XML parsing context
             XmlParsingContext xmlContext = new XmlParsingContext();
+
+            // Read past root elements
+            reader.Read();
+            reader.Read();
             
-            // Try to parse the info section first to extract counter names
-            ParseInfoSection(reader, xmlContext);
+            if (reader.Name == InfoName)
+            {
+                // Try to parse the info section first to extract counter names
+                ParseInfoSection(reader, xmlContext);
+            }
             
             if (reader.Name != TraceQueryResultName)
             {
@@ -172,55 +180,25 @@ namespace InstrumentsProcessor.Parsing
 
         private void ParseInfoSection(XmlReader reader, XmlParsingContext xmlContext)
         {
-            try
-            {
-                // Move to the beginning and look for info section
-                if (reader.ReadToFollowing("info"))
-                {
-                    XmlDocument doc = new XmlDocument();
-                    XmlNode infoNode = doc.ReadNode(reader);
-                    
-                    // Look for the counter names in the Events and Formulas section
-                    var counterNames = ExtractCounterNames(infoNode);
-                    if (counterNames != null && counterNames.Count > 0)
-                    {
-                        xmlContext.SetCounterNames(counterNames);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // If parsing the info section fails, continue without counter names
-                Debug.WriteLine($"Failed to parse info section: {ex.Message}");
-            }
-        }
+            XmlDocument doc = new XmlDocument();
+            XmlNode infoNode = doc.ReadNode(reader);
+            List<string> counterNames = new List<string>();
 
-        private List<string> ExtractCounterNames(XmlNode infoNode)
-        {
-            var counterNames = new List<string>();
-            
-            try
+            // Navigate through the XML structure to find Events and Formulas
+            XmlNodeList eventsAndFormulasNodes = infoNode.SelectNodes(".//key[@name='Events and Formulas']/value");
+
+            if (eventsAndFormulasNodes != null)
             {
-                // Navigate through the XML structure to find Events and Formulas
-                var eventsAndFormulasNodes = infoNode.SelectNodes(".//key[@name='Events and Formulas']/value");
-                
-                if (eventsAndFormulasNodes != null)
+                foreach (XmlNode valueNode in eventsAndFormulasNodes)
                 {
-                    foreach (XmlNode valueNode in eventsAndFormulasNodes)
+                    if (!string.IsNullOrWhiteSpace(valueNode.InnerText))
                     {
-                        if (!string.IsNullOrWhiteSpace(valueNode.InnerText))
-                        {
-                            counterNames.Add(valueNode.InnerText.Trim());
-                        }
+                        counterNames.Add(valueNode.InnerText.Trim());
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to extract counter names: {ex.Message}");
-            }
-            
-            return counterNames;
+
+            xmlContext.SetCounterNames(counterNames);
         }
     }
 }
