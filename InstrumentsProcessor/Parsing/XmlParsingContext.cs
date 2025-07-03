@@ -17,15 +17,14 @@ namespace InstrumentsProcessor.Parsing
         public ObjectCache ObjectCache { get; }
 
         /// <summary>
-        /// Dictionary containing counter names for pmc-events, if available.
-        /// Key is the index, value is the counter name.
+        /// List of all counter names in order as they appear in the info section.
         /// </summary>
-        public IDictionary<int, string> CounterNames { get; private set; }
+        public IReadOnlyList<string> CounterNames { get; private set; }
 
         public XmlParsingContext()
         {
             ObjectCache = new ObjectCache();
-            CounterNames = new Dictionary<int, string>();
+            CounterNames = new List<string>();
         }
 
         /// <summary>
@@ -34,11 +33,7 @@ namespace InstrumentsProcessor.Parsing
         /// <param name="counterNames">List of counter names in order</param>
         public void SetCounterNames(IList<string> counterNames)
         {
-            CounterNames = new Dictionary<int, string>();
-            for (int i = 0; i < counterNames.Count; i++)
-            {
-                CounterNames[i] = counterNames[i];
-            }
+            CounterNames = new List<string>(counterNames);
         }
     }
 }

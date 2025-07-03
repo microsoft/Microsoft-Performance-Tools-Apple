@@ -6,6 +6,7 @@ using System.Reflection;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
 using Microsoft.Performance.SDK;
+using System.Linq;
 
 namespace InstrumentsProcessorTests
 {
@@ -44,6 +45,7 @@ namespace InstrumentsProcessorTests
         [InlineData(@"TestData\system_trace")]
         [InlineData(@"TestData\trace_memory")]
         [InlineData(@"TestData\trace_thermal")]
+        [InlineData(@"TestData\cache")]
         public void BaselineTest(string inputFilePathWithoutFileExtension)
         {
             string inputFilePath = inputFilePathWithoutFileExtension + ".xml";

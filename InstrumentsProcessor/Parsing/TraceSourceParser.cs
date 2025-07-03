@@ -12,6 +12,7 @@ using System.Threading;
 using Microsoft.Performance.SDK;
 using System.Diagnostics;
 using System.Text;
+using System.Linq;
 using InstrumentsProcessor.Parsing.Events;
 
 namespace InstrumentsProcessor.Parsing
@@ -82,14 +83,24 @@ namespace InstrumentsProcessor.Parsing
             }
 
             XmlReader reader = GetXmlReader(fileDataSource, progress);
-            reader.ReadToDescendant(TraceQueryResultName);
+            
+            // Create the XML parsing context
+            XmlParsingContext xmlContext = new XmlParsingContext();
+            
+            // Try to parse the info section first to extract counter names
+            ParseInfoSection(reader, xmlContext);
+            
+            if (reader.Name != TraceQueryResultName)
+            {
+                reader.ReadToDescendant(TraceQueryResultName);
+            }
 
             while (reader.Name == TraceQueryResultName)
             {
                 if (reader.ReadToDescendant(NodeName))
                 {
                     XmlReader subtree = reader.ReadSubtree();
-                    ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken);
+                    ProcessNode(subtree, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, cancellationToken, xmlContext);
                     subtree.Close();
                     reader.Read();
                 }
@@ -99,14 +110,13 @@ namespace InstrumentsProcessor.Parsing
         }
 
         public void ProcessNode(XmlReader reader, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
-            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, CancellationToken cancellationToken)
+            ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, CancellationToken cancellationToken, XmlParsingContext xmlContext)
         {
             if (!reader.ReadToDescendant(SchemaName))
             {
                 return;
             }
 
-            XmlParsingContext xmlContext = new XmlParsingContext();
             Schema schema = (Schema)new XmlSerializer(typeof(Schema)).Deserialize(reader);
 
             if (!eventDeserializerProvider.TryGetDeserializer(schema, out IEventDeserializer eventDeserializer))
@@ -158,6 +168,59 @@ namespace InstrumentsProcessor.Parsing
             };
 
             return XmlReader.Create(stream, settings);
+        }
+
+        private void ParseInfoSection(XmlReader reader, XmlParsingContext xmlContext)
+        {
+            try
+            {
+                // Move to the beginning and look for info section
+                if (reader.ReadToFollowing("info"))
+                {
+                    XmlDocument doc = new XmlDocument();
+                    XmlNode infoNode = doc.ReadNode(reader);
+                    
+                    // Look for the counter names in the Events and Formulas section
+                    var counterNames = ExtractCounterNames(infoNode);
+                    if (counterNames != null && counterNames.Count > 0)
+                    {
+                        xmlContext.SetCounterNames(counterNames);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // If parsing the info section fails, continue without counter names
+                Debug.WriteLine($"Failed to parse info section: {ex.Message}");
+            }
+        }
+
+        private List<string> ExtractCounterNames(XmlNode infoNode)
+        {
+            var counterNames = new List<string>();
+            
+            try
+            {
+                // Navigate through the XML structure to find Events and Formulas
+                var eventsAndFormulasNodes = infoNode.SelectNodes(".//key[@name='Events and Formulas']/value");
+                
+                if (eventsAndFormulasNodes != null)
+                {
+                    foreach (XmlNode valueNode in eventsAndFormulasNodes)
+                    {
+                        if (!string.IsNullOrWhiteSpace(valueNode.InnerText))
+                        {
+                            counterNames.Add(valueNode.InnerText.Trim());
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to extract counter names: {ex.Message}");
+            }
+            
+            return counterNames;
         }
     }
 }
