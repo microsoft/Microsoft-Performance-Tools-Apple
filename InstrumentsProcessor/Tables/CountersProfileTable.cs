@@ -264,12 +264,12 @@ namespace InstrumentsProcessor.Tables
                 Projection.VisibleDomainRelativePercent.Create(clippedWeightColumn);
 
             // Collect all unique counter names from the data
-            var counterNames = new HashSet<object>();
-            foreach (var eventData in data)
+            HashSet<string> counterNames = new HashSet<string>();
+            foreach (CountersProfileEvent eventData in data)
             {
                 if (eventData.CounterValueArray?.CounterValues != null)
                 {
-                    foreach (var key in eventData.CounterValueArray.CounterValues.Keys)
+                    foreach (string key in eventData.CounterValueArray.CounterValues.Keys)
                     {
                         counterNames.Add(key);
                     }
@@ -277,14 +277,14 @@ namespace InstrumentsProcessor.Tables
             }
 
             // Sort counter names for consistent ordering (convert to list and sort)
-            var sortedCounterNames = counterNames.ToList();
+            List<string> sortedCounterNames = counterNames.ToList();
             sortedCounterNames.Sort((a, b) => string.Compare(a?.ToString(), b?.ToString(), StringComparison.Ordinal));
 
             // Create dynamic columns for each counter
             var dynamicCounterColumns = new List<ColumnConfiguration>();
             var dynamicCounterProjections = new List<IProjection<int, long>>();
 
-            foreach (var counterName in sortedCounterNames)
+            foreach (string counterName in sortedCounterNames)
             {
                 string displayName = counterName?.ToString() ?? "Unknown";
                 var counterColumn = new ColumnConfiguration(
