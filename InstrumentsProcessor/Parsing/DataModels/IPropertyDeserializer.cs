@@ -12,6 +12,6 @@ namespace InstrumentsProcessor.Parsing.DataModels
     /// </summary>
     public interface IPropertyDeserializer
     {
-        object DeserializeProperty(XmlNode node, ObjectCache cache, PropertyInfo property);
+        object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property);
     }
 }

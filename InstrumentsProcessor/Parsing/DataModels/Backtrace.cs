@@ -15,7 +15,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public IReadOnlyList<Frame> Frames { get; private set; }
 
-        public object DeserializeProperty(XmlNode node, ObjectCache cache, PropertyInfo property)
+        public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Frames")
             {
@@ -23,7 +23,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
 
                 foreach (XmlNode childNode in node)
                 {
-                    frames.Add(FrameDeserializer.Deserialize(childNode, cache));
+                    frames.Add(FrameDeserializer.Deserialize(childNode, context));
                 }
 
                 return frames;

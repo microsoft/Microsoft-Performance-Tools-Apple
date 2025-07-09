@@ -100,5 +100,10 @@ namespace InstrumentsProcessor.Parsing
                 return false;
             }
         }
+
+        public void Clear()
+        {
+            cache.Clear();
+        }
     }
 }

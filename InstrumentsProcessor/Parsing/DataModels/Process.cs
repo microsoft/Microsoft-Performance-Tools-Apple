@@ -21,13 +21,13 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public String DeviceSession { get; private set; }
 
-        public object DeserializeProperty(XmlNode node, ObjectCache cache, PropertyInfo property)
+        public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "ProcessId")
             {
                 XmlNode propertyNode = node.ChildNodes.Count >= 1 ? node.ChildNodes[0] : null;
 
-                return ProcessIdDeserializer.Deserialize(propertyNode, cache);
+                return ProcessIdDeserializer.Deserialize(propertyNode, context);
             }
             if (property.Name == "Name")
             {
@@ -39,7 +39,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
             {
                 XmlNode propertyNode = node.ChildNodes.Count >= 2 ? node.ChildNodes[1] : null;
 
-                return DeviceSessionDeserializer.Deserialize(propertyNode, cache);
+                return DeviceSessionDeserializer.Deserialize(propertyNode, context);
             }
             else
             {

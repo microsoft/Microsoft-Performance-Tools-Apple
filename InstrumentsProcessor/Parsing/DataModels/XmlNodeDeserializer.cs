@@ -27,16 +27,16 @@ namespace InstrumentsProcessor.Parsing.DataModels
             _propertyDeserializers = new Dictionary<string, object>();
         }
 
-        public T Deserialize(XmlNode node, ObjectCache cache)
+        public T Deserialize(XmlNode node, XmlParsingContext context)
         {
             if (node == null || node.Name == "sentinel")
             {
                 return default;
             }
 
-            if (cache.TryGetRefId(node, out int refId))
+            if (context.ObjectCache.TryGetRefId(node, out int refId))
             {
-                if (!cache.TryLookupObject(node, out object cachedObject))
+                if (!context.ObjectCache.TryLookupObject(node, out object cachedObject))
                 {
                     // We did not properly cache the object earlier
                     // This can happen if an event does not parse all of the XML in a schema
@@ -65,7 +65,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
 
                 foreach (PropertyInfo property in propertiesWithCustomDeserialization)
                 {
-                    object propertyValue = propertyDeserializer.DeserializeProperty(node, cache, property);
+                    object propertyValue = propertyDeserializer.DeserializeProperty(node, context, property);
                     property.SetValue(instance, propertyValue);
                 }
             }
@@ -77,7 +77,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
                 // TODO: Maybe add an interface that objects can implement to specify behavior when there are not enough child nodes
                 if (typeof(T) == typeof(Frame) || typeof(T) == typeof(Thread))
                 {
-                    cache.CacheObject(node, default);
+                    context.ObjectCache.CacheObject(node, default);
 
                     return default;
                 }
@@ -89,16 +89,16 @@ namespace InstrumentsProcessor.Parsing.DataModels
             for (int i = 0; i < propertiesWithDefaultDeserialization.Count; i++)
             {
                 PropertyInfo property = propertiesWithDefaultDeserialization[i];
-                object propertyValue = DeserializeProperty(node.ChildNodes[i], property, cache);
+                object propertyValue = DeserializeProperty(node.ChildNodes[i], property, context);
                 property.SetValue(instance, propertyValue);
             }
 
-            cache.CacheObject(node, instance);
+            context.ObjectCache.CacheObject(node, instance);
 
             return instance;
         }
 
-        private object DeserializeProperty(XmlNode node, PropertyInfo property, ObjectCache cache)
+        private object DeserializeProperty(XmlNode node, PropertyInfo property, XmlParsingContext context)
         {
             if (!_propertyDeserializers.TryGetValue(property.Name, out object deserializer))
             {
@@ -116,7 +116,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
             }
 
             MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-            object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { node, cache });
+            object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { node, context });
 
             return propertyValue;
         }
