@@ -64,11 +64,12 @@ namespace InstrumentsProcessor
                 {
                 new ContactInfo
                 {
-                    Name = "Author Name",
+                    Name = "Author Name: Hani Nemati, Benjamin Galindo-Navarro",
                     Address = "Author Email",
                     EmailAddresses = new[]
                     {
-                        "owners@mycompany.com",
+                        "hanemati@microsoft.com",
+                        "benjaming@microsoft.com"
                     },
                 },
             },
