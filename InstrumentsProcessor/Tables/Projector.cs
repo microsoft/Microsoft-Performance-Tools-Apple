@@ -149,7 +149,7 @@ namespace InstrumentsProcessor.Tables
 
         public static string SummaryProjector(ThreadStateEvent e)
         {
-            return e.Summary.Value;
+            return e.Summary?.Value ?? string.Empty;
         }
 
         public static string ThermalStateProjector(DeviceThermalStateIntervalEvent e)
