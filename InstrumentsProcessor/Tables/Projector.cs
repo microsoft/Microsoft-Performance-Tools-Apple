@@ -489,5 +489,46 @@ namespace InstrumentsProcessor.Tables
         {
             return e.Weight.Value;
         }
+
+        // ANE Hardware Interval Event Projectors
+        public static Timestamp StartTimeProjector(AneHwIntervalEvent e)
+        {
+            return e.StartTime.Value;
+        }
+
+        public static Timestamp StopTimeProjector(AneHwIntervalEvent e)
+        {
+            return e.StartTime.Value + e.Duration.Value;
+        }
+
+        public static TimestampDelta DurationProjector(AneHwIntervalEvent e)
+        {
+            return e.Duration.Value;
+        }
+
+        public static string ChannelNameProjector(AneHwIntervalEvent e)
+        {
+            return e.ChannelName?.Value ?? "Unknown";
+        }
+
+        public static int DepthProjector(AneHwIntervalEvent e)
+        {
+            return e.Depth?.Value ?? 0;
+        }
+
+        public static string LabelProjector(AneHwIntervalEvent e)
+        {
+            return e.Label?.Value ?? string.Empty;
+        }
+
+        public static string StateProjector(AneHwIntervalEvent e)
+        {
+            return e.State?.Value ?? "Unknown";
+        }
+
+        public static int ColorProjector(AneHwIntervalEvent e)
+        {
+            return e.Color?.Value ?? 0;
+        }
     }
 }
