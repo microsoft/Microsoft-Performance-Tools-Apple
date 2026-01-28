@@ -139,7 +139,7 @@ namespace InstrumentsProcessor.Tables
 
         public static int PriorityProjector(ThreadStateEvent e)
         {
-            return e.Priority.Value;
+            return e.Priority?.Value ?? -1;
         }
 
         public static string NoteProjector(ThreadStateEvent e)
