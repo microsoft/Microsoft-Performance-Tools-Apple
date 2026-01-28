@@ -7,10 +7,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Xml;
+using Microsoft.Performance.SDK;
 
 namespace InstrumentsProcessor.Parsing.DataModels
 {
-    /// <summary>
+    using PropertyDeserializer = Action<object, XmlNode, XmlParsingContext>;
+
+     /// <summary>
     /// The XmlNodeDeserializer class is responsible for deserializing XML nodes into objects of type T.
     /// It supports deserialization of properties with and without custom deserialization logic.
     /// The class checks the ObjectCache for existing instances before creating new ones.
@@ -20,11 +23,62 @@ namespace InstrumentsProcessor.Parsing.DataModels
     /// </summary>
     public class XmlNodeDeserializer<T> where T : new()
     {
-        private readonly Dictionary<string, object> _propertyDeserializers;
+        private static readonly List<PropertyDeserializer> defaultDeserializers = CollectDefaultDeserializers();
+        private static readonly List<PropertyDeserializer> customDeserializers = CollectCustomDeserializers();
 
-        public XmlNodeDeserializer()
+        private static List<PropertyDeserializer> CollectDefaultDeserializers()
         {
-            _propertyDeserializers = new Dictionary<string, object>();
+            var deserializers = new List<PropertyDeserializer>();
+
+            List<PropertyInfo> properties = typeof(T).GetProperties()
+                .Where(p => p.GetCustomAttribute<CustomDeserializationAttribute>() == null)
+                .ToList();
+
+            foreach (PropertyInfo property in properties)
+            {
+                Type propertyType = property.PropertyType;
+
+                // Check for parameterless constructor
+                if (propertyType.GetConstructor(Type.EmptyTypes) == null)
+                {
+                    throw new InvalidOperationException($"Property {property.Name} of type {propertyType.FullName} must have a public parameterless constructor.");
+                }
+
+                Type deserializerType = typeof(XmlNodeDeserializer<>).MakeGenericType(propertyType);
+                object deserializer = Activator.CreateInstance(deserializerType);
+
+                MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
+                deserializers.Add((instance, node, context) =>
+                {
+                    object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { node, context });
+                    property.SetValue(instance, propertyValue);
+                });
+            }
+
+            return deserializers;
+        }
+
+        private static List<PropertyDeserializer> CollectCustomDeserializers()
+        {
+            var deserializers = new List<PropertyDeserializer>();
+
+            if (typeof(T).Implements<IPropertyDeserializer>())
+            { 
+                List<PropertyInfo> properties = typeof(T).GetProperties()
+                    .Where(p => p.GetCustomAttribute<CustomDeserializationAttribute>() != null)
+                    .ToList();
+
+                foreach (PropertyInfo property in properties)
+                {
+                    deserializers.Add((instance, node, context) =>
+                    {
+                        object propertyValue = ((IPropertyDeserializer)instance).DeserializeProperty(node, context, property);
+                        property.SetValue(instance, propertyValue);
+                    });
+                }
+            }
+
+            return deserializers;
         }
 
         public T Deserialize(XmlNode node, XmlParsingContext context)
@@ -51,27 +105,14 @@ namespace InstrumentsProcessor.Parsing.DataModels
             // Create an instance of T
             T instance = new T();
 
-            // Loop over the properties of T and the child nodes
-            List<PropertyInfo> propertiesWithDefaultDeserialization = typeof(T).GetProperties()
-                .Where(p => p.GetCustomAttribute<CustomDeserializationAttribute>() == null)
-                .ToList();
-
             // First, deserialize properties with the custom attribute
-            if (instance is IPropertyDeserializer propertyDeserializer)
+            foreach (var deserialize in customDeserializers)
             {
-                List<PropertyInfo> propertiesWithCustomDeserialization = typeof(T).GetProperties()
-                .Where(p => p.GetCustomAttribute<CustomDeserializationAttribute>() != null)
-                .ToList();
-
-                foreach (PropertyInfo property in propertiesWithCustomDeserialization)
-                {
-                    object propertyValue = propertyDeserializer.DeserializeProperty(node, context, property);
-                    property.SetValue(instance, propertyValue);
-                }
+                deserialize(instance, node, context);
             }
             
             // Ensure the number of properties with default deserialization is less than or equal to the number of child nodes
-            if (propertiesWithDefaultDeserialization.Count > node.ChildNodes.Count)
+            if (defaultDeserializers.Count > node.ChildNodes.Count)
             {
                 // Sometimes, frames or threads are empty this is okay. Should returning the current object be the default behavior or should we throw an exception in this case?
                 // TODO: Maybe add an interface that objects can implement to specify behavior when there are not enough child nodes
@@ -82,43 +123,18 @@ namespace InstrumentsProcessor.Parsing.DataModels
                     return default;
                 }
 
-                throw new InvalidOperationException($"The number of properties in type {typeof(T).FullName} ({propertiesWithDefaultDeserialization.Count}) with default serialization is greater than number of child nodes in the XML ({node.ChildNodes.Count}).");
+                throw new InvalidOperationException($"The number of properties in type {typeof(T).FullName} ({defaultDeserializers.Count}) with default serialization is greater than number of child nodes in the XML ({node.ChildNodes.Count}).");
             }
 
             // Then, deserialize properties without the custom attribute
-            for (int i = 0; i < propertiesWithDefaultDeserialization.Count; i++)
+            for (int i = 0; i < defaultDeserializers.Count; i++)
             {
-                PropertyInfo property = propertiesWithDefaultDeserialization[i];
-                object propertyValue = DeserializeProperty(node.ChildNodes[i], property, context);
-                property.SetValue(instance, propertyValue);
+                defaultDeserializers[i](instance, node.ChildNodes[i], context);
             }
 
             context.ObjectCache.CacheObject(node, instance);
 
             return instance;
-        }
-
-        private object DeserializeProperty(XmlNode node, PropertyInfo property, XmlParsingContext context)
-        {
-            if (!_propertyDeserializers.TryGetValue(property.Name, out object deserializer))
-            {
-                Type propertyType = property.PropertyType;
-
-                // Check for parameterless constructor
-                if (propertyType.GetConstructor(Type.EmptyTypes) == null)
-                {
-                    throw new InvalidOperationException($"Property {property.Name} of type {propertyType.FullName} must have a public parameterless constructor.");
-                }
-
-                Type deserializerType = typeof(XmlNodeDeserializer<>).MakeGenericType(propertyType);
-                deserializer = Activator.CreateInstance(deserializerType);
-                _propertyDeserializers[property.Name] = deserializer;
-            }
-
-            MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-            object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { node, context });
-
-            return propertyValue;
         }
     }
 }

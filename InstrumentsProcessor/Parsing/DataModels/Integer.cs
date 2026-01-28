@@ -9,6 +9,15 @@ namespace InstrumentsProcessor.Parsing.DataModels
 {
     public class Integer : IPropertyDeserializer
     {
+        public Integer()
+        {
+        }
+
+        public Integer(int value)
+        {
+            Value = value;
+        }
+
         [CustomDeserialization]
         public int Value { get; private set; }
 
@@ -23,5 +32,7 @@ namespace InstrumentsProcessor.Parsing.DataModels
                 throw new InvalidOperationException();
             }
         }
+
+        public static readonly XmlNodeDeserializer<Integer> Deserializer = new XmlNodeDeserializer<Integer>();
     }
 }

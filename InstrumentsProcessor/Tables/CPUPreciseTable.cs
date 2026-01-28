@@ -32,7 +32,7 @@ namespace InstrumentsProcessor.Tables
             {
                 IsVisible = true,
                 Width = 100,
-                CellFormat = TimestampFormatter.FormatMicrosecondsGrouped,
+                CellFormat = TimestampFormatter.FormatSecondsGrouped,
                 AggregationMode = AggregationMode.Min
             });
 
@@ -42,12 +42,12 @@ namespace InstrumentsProcessor.Tables
             {
                 IsVisible = true,
                 Width = 100,
-                CellFormat = TimestampFormatter.FormatMicrosecondsGrouped,
+                CellFormat = TimestampFormatter.FormatSecondsGrouped,
                 AggregationMode = AggregationMode.Max
             });
 
-        private static readonly ColumnConfiguration durationColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("e578ce4c-5fc6-4b95-8c43-8aa361440829"), "Duration"),
+        private static readonly ColumnConfiguration runTimeColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("e578ce4c-5fc6-4b95-8c43-8aa361440829"), "CPU Time") { ShortDescription = "The time the thread switching in spends switched in" },
             new UIHints
             {
                 IsVisible = true,
@@ -64,8 +64,8 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
-        private static readonly ColumnConfiguration stateColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("65f04384-3a82-43dc-b8e9-797c1366f47b"), "State"),
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("ce446c79-2986-4133-9151-486fa48f69df"), "Thread Name"),
             new UIHints
             {
                 IsVisible = true,
@@ -96,6 +96,14 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
+        private static readonly ColumnConfiguration cpuIdColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("3a78ac08-6126-41e3-a7e5-27b8537613f6"), "CPU ID"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration cpuColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("b644001c-4171-4a70-bab1-e0da9f967f18"), "CPU"),
             new UIHints
@@ -112,8 +120,8 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
-        private static readonly ColumnConfiguration cpuTimeColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("d2be4eba-6714-4c45-bf8d-9cd626729f5f"), "CPU Time"),
+        private static readonly ColumnConfiguration readyTimeColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("d2be4eba-6714-4c45-bf8d-9cd626729f5f"), "Ready Time") { ShortDescription = "The time the thread switching in spent between waiting and being switched in" },
             new UIHints
             {
                 IsVisible = true,
@@ -123,7 +131,7 @@ namespace InstrumentsProcessor.Tables
             });
 
         private static readonly ColumnConfiguration waitTimeColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("2ebc93c7-391d-4ed9-895d-177f5dfc5289"), "Wait Time"),
+            new ColumnMetadata(new Guid("2ebc93c7-391d-4ed9-895d-177f5dfc5289"), "Wait Time") { ShortDescription = "The time the thread switching in spent waiting" },
             new UIHints
             {
                 IsVisible = true,
@@ -189,7 +197,6 @@ namespace InstrumentsProcessor.Tables
         {
             List<ThreadStateEvent> data =
                 requiredData.QueryOutput<List<ThreadStateEvent>>(new DataOutputPath(ThreadStateCooker.DataCookerPath, nameof(ThreadStateCooker.ThreadStateEvents)));
-            data = data.Where(d => d.State.Value == "Running").ToList();
 
             ITableBuilderWithRowCount tableBuilderWithRowCount = tableBuilder.SetRowCount(data.Count);
 
@@ -197,44 +204,51 @@ namespace InstrumentsProcessor.Tables
 
             var switchInTimeProjection = baseProjection.Compose(Projector.SwitchInTimeProjector);
             var switchOutTimeProjection = baseProjection.Compose(Projector.SwitchOutTimeProjector);
-            var durationProjection = baseProjection.Compose(Projector.DurationProjector);
+            var runTimeProjection = baseProjection.Compose(Projector.DurationProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
-            var stateProjection = baseProjection.Compose(Projector.StateProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var processProjection = baseProjection.Compose(Projector.ProcessProjector);
             var processIdProjection = processProjection.Compose(Projector.ProcessIdProjector);
             var processNameProjection = processProjection.Compose(Projector.ProcessNameProjector);
             var deviceSessionProjection = processProjection.Compose(Projector.DeviceSessionProjector);
+            var cpuIdProjection = baseProjection.Compose(Projector.CpuIdProjector);
             var cpuProjection = baseProjection.Compose(Projector.CpuProjector);
             var priorityProjection = baseProjection.Compose(Projector.PriorityProjector);
-            var cpuTimeProjection = baseProjection.Compose(Projector.CpuTimeProjector);
+            var readyTimeProjection = baseProjection.Compose(Projector.ReadyTimeProjector);
             var waitTimeProjection = baseProjection.Compose(Projector.WaitTimeProjector);
             var noteProjection = baseProjection.Compose(Projector.NoteProjector);
             var summaryProjection = baseProjection.Compose(Projector.SummaryProjector);
+
+            TimestampDelta ReduceTimeSinceLastDiff(Timestamp timeSinceLast1, Timestamp timeSinceLast2)
+            {
+                return timeSinceLast1 - timeSinceLast2;
+            }
 
             var viewportClippedSwitchOutTimeForPreviousOnCpuProjection =
                 Projection.ClipTimeToVisibleDomain.Create(switchInTimeProjection);
             var viewportClippedSwitchOutTimeForNextOnCpuProjection =
                 Projection.ClipTimeToVisibleDomain.Create(switchOutTimeProjection);
-            var cpuUsageProjection = Projection.Select(switchOutTimeProjection, switchInTimeProjection, new ReduceTimeSinceLastDiff());
-            var cpuUsageInViewportProjection = Projection.Select(
+            var cpuUsageProjection = Projection.Project(switchOutTimeProjection, switchInTimeProjection, ReduceTimeSinceLastDiff);
+            var cpuUsageInViewportProjection = Projection.Project(
                     viewportClippedSwitchOutTimeForNextOnCpuProjection,
                     viewportClippedSwitchOutTimeForPreviousOnCpuProjection,
-                    new ReduceTimeSinceLastDiff());
+                    ReduceTimeSinceLastDiff);
             var percentCpuUsageProjection =
                 Projection.VisibleDomainRelativePercent.Create(cpuUsageInViewportProjection);
 
             tableBuilderWithRowCount.AddColumn(switchInTimeColumn, switchInTimeProjection);
             tableBuilderWithRowCount.AddColumn(switchOutTimeColumn, switchOutTimeProjection);
-            tableBuilderWithRowCount.AddColumn(durationColumn, durationProjection);
+            tableBuilderWithRowCount.AddColumn(runTimeColumn, runTimeProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
-            tableBuilderWithRowCount.AddColumn(stateColumn, stateProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
+            tableBuilderWithRowCount.AddColumn(cpuIdColumn, cpuIdProjection);
             tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
             tableBuilderWithRowCount.AddColumn(priorityColumn, priorityProjection);
-            tableBuilderWithRowCount.AddColumn(cpuTimeColumn, cpuTimeProjection);
+            tableBuilderWithRowCount.AddColumn(readyTimeColumn, readyTimeProjection);
             tableBuilderWithRowCount.AddColumn(waitTimeColumn, waitTimeProjection);
             tableBuilderWithRowCount.AddColumn(noteColumn, noteProjection);
             tableBuilderWithRowCount.AddColumn(summaryColumn, summaryProjection);
@@ -250,9 +264,10 @@ namespace InstrumentsProcessor.Tables
                     threadIdColumn,
                     TableConfiguration.PivotColumn,
                     countPreset,
-                    cpuUsageInViewportColumn,
                     waitTimeColumn,
-                    cpuTimeColumn,
+                    readyTimeColumn,
+                    runTimeColumn,
+                    cpuUsageInViewportColumn,
                     switchInTimeColumn,
                     TableConfiguration.GraphColumn,
                     percentCpuUsageColumn
@@ -261,20 +276,19 @@ namespace InstrumentsProcessor.Tables
 
             tableConfig.AddColumnRole(ColumnRole.StartTime, switchInTimeColumn);
             tableConfig.AddColumnRole(ColumnRole.EndTime, switchOutTimeColumn);
+            tableConfig.AddColumnRole(ColumnRole.ResourceId, cpuIdColumn);
             tableBuilder.AddTableConfiguration(tableConfig);
 
             var tableConfigTimeLineByCpu = new TableConfiguration("Timeline by CPU")
             {
                 Columns = new[]
-    {
+                {
                     cpuColumn,
                     processNameColumn,
                     TableConfiguration.PivotColumn,
                     countPreset,
+                    runTimeColumn,
                     cpuUsageInViewportColumn,
-                    waitTimeColumn,
-                    cpuTimeColumn,
-                    switchInTimeColumn,
                     TableConfiguration.GraphColumn,
                     switchInTimeColumn,
                     switchOutTimeColumn
@@ -283,7 +297,7 @@ namespace InstrumentsProcessor.Tables
 
             tableConfigTimeLineByCpu.AddColumnRole(ColumnRole.StartTime, switchInTimeColumn);
             tableConfigTimeLineByCpu.AddColumnRole(ColumnRole.EndTime, switchOutTimeColumn);
-
+            tableConfigTimeLineByCpu.AddColumnRole(ColumnRole.ResourceId, cpuIdColumn);
             tableBuilder.AddTableConfiguration(tableConfigTimeLineByCpu);
 
             var tableConfigTimeLineByProcess = new TableConfiguration("Timeline by Process,Thread")
@@ -294,10 +308,8 @@ namespace InstrumentsProcessor.Tables
                     threadIdColumn,
                     TableConfiguration.PivotColumn,
                     countPreset,
+                    runTimeColumn,
                     cpuUsageInViewportColumn,
-                    waitTimeColumn,
-                    cpuTimeColumn,
-                    switchInTimeColumn,
                     TableConfiguration.GraphColumn,
                     switchInTimeColumn,
                     switchOutTimeColumn
@@ -306,18 +318,10 @@ namespace InstrumentsProcessor.Tables
 
             tableConfigTimeLineByProcess.AddColumnRole(ColumnRole.StartTime, switchInTimeColumn);
             tableConfigTimeLineByProcess.AddColumnRole(ColumnRole.EndTime, switchOutTimeColumn);
+            tableConfigTimeLineByProcess.AddColumnRole(ColumnRole.ResourceId, cpuIdColumn);
             tableBuilder.AddTableConfiguration(tableConfigTimeLineByProcess);
 
             tableBuilder.SetDefaultTableConfiguration(tableConfig);
-        }
-
-        private struct ReduceTimeSinceLastDiff
-            : IFunc<int, Timestamp, Timestamp, TimestampDelta>
-        {
-            public TimestampDelta Invoke(int value, Timestamp timeSinceLast1, Timestamp timeSinceLast2)
-            {
-                return timeSinceLast1 - timeSinceLast2;
-            }
         }
     }
 }

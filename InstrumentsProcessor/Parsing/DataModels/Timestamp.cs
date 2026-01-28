@@ -9,6 +9,15 @@ namespace InstrumentsProcessor.Parsing.DataModels
 {
     public class Timestamp : IPropertyDeserializer
     {
+        public Timestamp()
+        {
+        }
+
+        public Timestamp(Microsoft.Performance.SDK.Timestamp value)
+        {
+            Value = value;
+        }
+
         [CustomDeserialization]
         public Microsoft.Performance.SDK.Timestamp Value { get; private set; }
 

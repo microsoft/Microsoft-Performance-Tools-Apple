@@ -47,6 +47,11 @@ namespace InstrumentsProcessor.Tables
             return thread?.ThreadId.Value ?? -1;
         }
 
+        public static string ThreadNameProjector(Thread thread)
+        {
+            return thread?.ThreadName ?? "Unknown";
+        }
+
         public static int ProcessIdProjector(Process process)
         {
             return process?.ProcessId?.Value ?? -1;
@@ -62,45 +67,19 @@ namespace InstrumentsProcessor.Tables
             return process?.DeviceSession?.Value ?? "Unknown";
         }
 
-        public static string CpuProjector(TimeProfileEvent e)
+        public static int CpuIdProjector(TimeProfileEvent e)
         {
-            if (e.Core == null)
-            {
-                return "Unknown";
-            }
-
-            Regex regex = new Regex(@"CPU (\d+)");
-            Match match = regex.Match(e.Core.Value);
-
-            if (match.Success)
-            {
-                return match.Groups[1].Value;
-            }
-
-            return "Unknown";
+            return e.Core?.CoreId ?? -1;
         }
 
-        public static string ProcessorClassProjector(TimeProfileEvent e)
+        public static string CpuProjector(TimeProfileEvent e)
         {
-            if (e.Core == null)
-            {
-                return "Unknown";
-            }
-            
-            Regex regex = new Regex(@"\((.*?)\)");
-            Match match = regex.Match(e.Core.Value);
-
-            if (match.Success)
-            {
-                return match.Groups[1].Value;
-            }
-
-            return "Unknown";
+            return e.Core?.Core ?? "Unknown";
         }
 
         public static string StateProjector(TimeProfileEvent e)
         {
-            return e.ThreadState.Value;
+            return e.ThreadState?.Value ?? "Unknown";
         }
 
         public static TimestampDelta WeightProjector(TimeProfileEvent e)
@@ -130,26 +109,32 @@ namespace InstrumentsProcessor.Tables
 
         public static string StateProjector(ThreadStateEvent e)
         {
-            return e.State.Value;
+            return e.State?.Value ?? "Unknown";
         }
 
         public static Process ProcessProjector(ThreadStateEvent e)
         {
             return e.Process;
         }
-        public static string CpuProjector(ThreadStateEvent e)
+
+        public static int CpuIdProjector(ThreadStateEvent e)
         {
-            return e.Core != null ? e.Core.Value : "Unknown";
+            return e.Core?.CoreId ?? -1;
         }
 
-        public static TimestampDelta CpuTimeProjector(ThreadStateEvent e)
+        public static string CpuProjector(ThreadStateEvent e)
         {
-            return e.RunningTime?.Value != null ? e.RunningTime.Value : default; // TODO: handle the null case better
+            return e.Core?.Core ?? "Unknown";
+        }
+
+        public static TimestampDelta ReadyTimeProjector(ThreadStateEvent e)
+        {
+            return e.Ready?.Value ?? TimestampDelta.Zero;
         }
 
         public static TimestampDelta WaitTimeProjector(ThreadStateEvent e)
         {
-            return e.WaitTime?.Value != null ? e.WaitTime.Value : default; // TODO: handle the null case better
+            return e.Waiting?.Value ?? TimestampDelta.Zero;
         }
 
         public static int PriorityProjector(ThreadStateEvent e)
@@ -374,7 +359,7 @@ namespace InstrumentsProcessor.Tables
 
         public static string StateProjector(MetalGpuIntervalEvent e)
         {
-            return e.State.Value;
+            return e.State?.Value ?? "Unknown";
         }
 
         public static string ConnectionUUIDProjector(MetalGpuIntervalEvent e)
