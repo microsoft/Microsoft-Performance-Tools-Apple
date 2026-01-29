@@ -140,7 +140,7 @@ namespace InstrumentsProcessor.Parsing
             while (reader.Name == RowName)
             {
                 XmlNode rowNode = doc.ReadNode(reader);
-                Event e = eventDeserializer.Deserialize(rowNode, xmlContext, schema);
+                Event e = eventDeserializer.Deserialize(rowNode, xmlContext);
 
                 dataProcessor.ProcessDataElement(e, context, cancellationToken);
 

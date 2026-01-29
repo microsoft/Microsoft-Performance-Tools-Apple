@@ -18,8 +18,8 @@ namespace InstrumentsProcessor.Parsing
 
         public class Column
         {
-            [XmlElement("mneumonic")]
-            public string Mneumonic { get; set; }
+            [XmlElement("mnemonic")]
+            public string Mnemonic { get; set; }
 
             [XmlElement("name")]
             public string Name { get; set; }

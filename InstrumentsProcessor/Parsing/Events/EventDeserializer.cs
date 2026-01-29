@@ -9,6 +9,21 @@ using System.Xml;
 
 namespace InstrumentsProcessor.Parsing.Events
 {
+    using PropertyDeserializer = Func<XmlNode, XmlParsingContext, object>;
+    using PropertySetter = Action<object, XmlNode, XmlParsingContext>;
+
+    internal class DeserializerMap
+    {
+        public DeserializerMap(Dictionary<string, PropertyDeserializer> byPropertyName, Dictionary<string, PropertyDeserializer> byEngineeringType)
+        {
+            ByPropertyName = byPropertyName;
+            ByEngineeringType = byEngineeringType;
+        }
+
+        public readonly Dictionary<string, PropertyDeserializer> ByPropertyName;
+        public readonly Dictionary<string, PropertyDeserializer> ByEngineeringType;
+    };
+
     /// <summary>
     /// The EventDeserializer class builds deserializers for events, which represent rows of data in a schema.
     /// It uses the ColumnAttribute to identify properties in the event and creates deserializers for each using XmlNodeDeserializer.
@@ -17,72 +32,99 @@ namespace InstrumentsProcessor.Parsing.Events
     /// </summary>
     public class EventDeserializer<TEvent> : IEventDeserializer where TEvent : Event, new()
     {
-        private readonly Dictionary<(string Name, string EngineeringType), PropertyInfo> propertiesByColumn;
-        private readonly Dictionary<string, object> propertyDeserializersByName;
-        private readonly Dictionary<string, object> propertyDeserializersByEngineeringType;
+        private PropertySetter[] settersInOrder;
+        private static readonly Dictionary<(string Name, string EngineeringType), PropertyInfo> propertiesByColumn = CollectProperties();
+        private static readonly DeserializerMap deserializers = MakeDeserializers();
 
-        public EventDeserializer()
+        private static Dictionary<(string Name, string EngineeringType), PropertyInfo> CollectProperties()
         {
-            propertiesByColumn = new Dictionary<(string Name, string EngineeringType), PropertyInfo>();
-            propertyDeserializersByName = new Dictionary<string, object>();
-            propertyDeserializersByEngineeringType = new Dictionary<string, object>();
+            var propertyMap = new Dictionary<(string Name, string EngineeringType), PropertyInfo>();
 
             PropertyInfo[] properties = typeof(TEvent).GetProperties();
-
             foreach (PropertyInfo property in properties)
             {
                 ColumnAttribute attribute = property.GetCustomAttribute<ColumnAttribute>();
 
                 if (attribute != null)
                 {
-                    propertiesByColumn[(attribute.Name, attribute.EngineeringType)] = property;
+                    propertyMap[(attribute.Name, attribute.EngineeringType)] = property;
                 }
             }
+
+            return propertyMap;
+        }
+
+        private static DeserializerMap MakeDeserializers()
+        {
+            var byPropertyName = new Dictionary<string, PropertyDeserializer>();
+            var byEngineeringType = new Dictionary<string, PropertyDeserializer>();
+
+            foreach (var entry in propertiesByColumn)
+            {
+                Type propertyType = entry.Value.PropertyType;
+
+                if (propertyType.GetConstructor(Type.EmptyTypes) == null)
+                {
+                    throw new InvalidOperationException($"Property {entry.Key.Name} of type {propertyType.FullName} must have a public parameterless constructor.");
+                }
+
+                Type deserializerType = typeof(XmlNodeDeserializer<>).MakeGenericType(propertyType);
+                object deserializer = Activator.CreateInstance(deserializerType);
+                MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
+
+                PropertyDeserializer callDeserializer = (node, context) =>
+                {
+                    return deserializeMethod.Invoke(deserializer, new object[] { node, context });
+                };
+
+                byPropertyName[entry.Value.Name] = callDeserializer;
+                byEngineeringType[entry.Key.EngineeringType] = callDeserializer;
+            }
+
+            return new DeserializerMap(byPropertyName, byEngineeringType);
         }
 
         public bool CanDeserialize(Schema schema)
         {
-            foreach (Schema.Column column in schema.Columns)
+            // Take this opportunity to index our properties & deserializers by schema order.
+            // We don't expect Deserialize() to be called unless we return true.
+            settersInOrder = new PropertySetter[schema.Columns.Count];
+
+            for (int i = 0; i < schema.Columns.Count; i++)
             {
-                if (!propertiesByColumn.ContainsKey((column.Name, column.EngineeringType)))
+                Schema.Column column = schema.Columns[i];
+                if (!propertiesByColumn.TryGetValue((column.Name, column.EngineeringType), out PropertyInfo property))
                 {
                     return false;
                 }
+
+                if (!deserializers.ByPropertyName.TryGetValue(property.Name, out PropertyDeserializer deserializer))
+                {
+                    return false;
+                }
+
+                settersInOrder[i] = (eventInstance, childNode, context) =>
+                {
+                    property.SetValue(eventInstance, deserializer(childNode, context));
+                };
             }
 
             return true;
         }
 
-        public Event Deserialize(XmlNode node, XmlParsingContext context, Schema schema)
+        public Event Deserialize(XmlNode node, XmlParsingContext context)
         {
-            if (node.ChildNodes.Count != schema.Columns.Count)
+            if (node.ChildNodes.Count != settersInOrder.Length)
             {
-                throw new InvalidOperationException($"The number of child nodes in the XML ({node.ChildNodes.Count}) does not match the number of columns in the schema ({schema.Columns.Count}).");
+                throw new InvalidOperationException($"The number of child nodes in the XML ({node.ChildNodes.Count}) does not match the number of columns in the schema ({settersInOrder.Length}).");
             }
 
             TEvent instance = new TEvent();
 
-            // Create all property deserializers before we begin deserialization
-            CreatePropertyDeserializers(schema);
-
-            for (int i = 0; i < schema.Columns.Count; i++)
+            for (int i = 0; i < settersInOrder.Length; i++)
             {
-                Schema.Column column = schema.Columns[i];
-
-                if (!propertiesByColumn.TryGetValue((column.Name, column.EngineeringType), out PropertyInfo property))
-                {
-                    throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
-                }
-
-                if (!propertyDeserializersByName.TryGetValue(property.Name, out object deserializer))
-                {
-                    throw new InvalidOperationException($"No deserializer found for property {property.Name}.");
-                }
-
                 XmlNode childNode = node.ChildNodes[i];
-                MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-                object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, context });
-                property.SetValue(instance, propertyValue);
+                settersInOrder[i](instance, childNode, context);
 
                 if (childNode.Name == "narrative" || childNode.Name == "formatted-label")
                 {
@@ -94,41 +136,13 @@ namespace InstrumentsProcessor.Parsing.Events
             return instance;
         }
 
-
-        private void CreatePropertyDeserializers(Schema schema)
-        {
-            foreach (var column in schema.Columns)
-            {
-                if (!propertiesByColumn.TryGetValue((column.Name, column.EngineeringType), out PropertyInfo property))
-                {
-                    throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
-                }
-
-                if (!propertyDeserializersByName.ContainsKey(property.Name))
-                {
-                    Type propertyType = property.PropertyType;
-
-                    if (propertyType.GetConstructor(Type.EmptyTypes) == null)
-                    {
-                        throw new InvalidOperationException($"Property {property.Name} of type {propertyType.FullName} must have a public parameterless constructor.");
-                    }
-
-                    Type deserializerType = typeof(XmlNodeDeserializer<>).MakeGenericType(propertyType);
-                    object deserializer = Activator.CreateInstance(deserializerType);
-                    propertyDeserializersByName[property.Name] = deserializer;
-                    propertyDeserializersByEngineeringType[column.EngineeringType] = deserializer;
-                }
-            }
-        }
-
         private void ProcessDynamicType(XmlNode dynamicNode, XmlParsingContext context)
         {
             foreach (XmlNode childNode in dynamicNode)
             {
-                if (propertyDeserializersByEngineeringType.TryGetValue(childNode.Name, out object deserializer))
+                if (deserializers.ByEngineeringType.TryGetValue(childNode.Name, out PropertyDeserializer deserialize))
                 {
-                    MethodInfo deserializeMethod = deserializer.GetType().GetMethod("Deserialize");
-                    object propertyValue = deserializeMethod.Invoke(deserializer, new object[] { childNode, context });
+                    deserialize(childNode, context);
                 }
             }
         }

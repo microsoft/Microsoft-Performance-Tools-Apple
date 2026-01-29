@@ -35,6 +35,8 @@ namespace InstrumentsProcessor.Tables
             {
                 IsVisible = true,
                 Width = 100,
+                AggregationMode = AggregationMode.Min,
+                CellFormat = TimestampFormatter.FormatSecondsGrouped
             });
 
         private static readonly ColumnConfiguration stackColumn = new ColumnConfiguration(
@@ -69,6 +71,14 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("ce446c79-2986-4133-9151-486fa48f69df"), "Thread Name"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration processIdColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("e4b7e1a5-5bae-4157-b9d7-36c58cbeab28"), "Process ID"),
             new UIHints
@@ -93,16 +103,16 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
-        private static readonly ColumnConfiguration cpuColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("3a78ac08-6126-41e3-a7e5-27b8537613f6"), "CPU"),
+        private static readonly ColumnConfiguration cpuIdColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("3a78ac08-6126-41e3-a7e5-27b8537613f6"), "CPU ID"),
             new UIHints
             {
                 IsVisible = true,
                 Width = 100,
             });
 
-        private static readonly ColumnConfiguration processorClassColumn = new ColumnConfiguration(
-            new ColumnMetadata(new Guid("d42d296e-e1cf-4610-a54f-f7bacd1426ce"), "Processor Class"),
+        private static readonly ColumnConfiguration cpuColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("d42d296e-e1cf-4610-a54f-f7bacd1426ce"), "CPU"),
             new UIHints
             {
                 IsVisible = true,
@@ -191,37 +201,50 @@ namespace InstrumentsProcessor.Tables
             var timeStampProjection = baseProjection.Compose(Projector.TimeStampProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var processProjection = baseProjection.Compose(Projector.ProcessProjector);
             var processIdProjection = processProjection.Compose(Projector.ProcessIdProjector);
             var processNameProjection = processProjection.Compose(Projector.ProcessNameProjector);
             var deviceSessionProjection = processProjection.Compose(Projector.DeviceSessionProjector);
+            var cpuIdProjection = baseProjection.Compose(Projector.CpuIdProjector);
             var cpuProjection = baseProjection.Compose(Projector.CpuProjector);
-            var processorClassProjection = baseProjection.Compose(Projector.ProcessorClassProjector);
             var stackProjection = baseProjection.Compose(Projector.StackProjector);
             var moduleProjection = stackProjection.Compose(Projector.ModuleProjector);
             var functionProjection = stackProjection.Compose(Projector.FunctionProjector);
             var stateProjection = baseProjection.Compose(Projector.StateProjector);
             var weightProjection = baseProjection.Compose(Projector.WeightProjector);
 
-            var startTimeProjection = Projection.Select(timeStampProjection, weightProjection, new ReduceTimeMinusDelta());
+            Timestamp ReduceTimeMinusDelta(Timestamp timestamp, TimestampDelta delta)
+            {
+                return timestamp - delta;
+            }
+
+            TimestampDelta ReduceTimeSinceLastDiff(Timestamp timeSinceLast1, Timestamp timeSinceLast2)
+            {
+                return timeSinceLast1 - timeSinceLast2;
+            }
+
+            var startTimeProjection = Projection.Project(timeStampProjection, weightProjection, ReduceTimeMinusDelta);
+
             var viewportClippedStartTimeProjection =
                 Projection.ClipTimeToVisibleDomain.Create(startTimeProjection);
             var viewportClippedEndTimeProjection =
                 Projection.ClipTimeToVisibleDomain.Create(timeStampProjection);
-            var clippedWeightColumn = Projection.Select(
+            var clippedWeightColumn = Projection.Project(
                 viewportClippedEndTimeProjection,
                 viewportClippedStartTimeProjection,
-                new ReduceTimeSinceLastDiff());
+                ReduceTimeSinceLastDiff);
             var weightPercentProjection =
                 Projection.VisibleDomainRelativePercent.Create(clippedWeightColumn);
 
             tableBuilderWithRowCount.AddColumn(timeStampColumn, timeStampProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
+            tableBuilderWithRowCount.AddColumn(cpuIdColumn, cpuIdProjection);
             tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
-            tableBuilderWithRowCount.AddColumn(processorClassColumn, processorClassProjection);
             tableBuilderWithRowCount.AddColumn(stateColumn, stateProjection);
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
             tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
@@ -259,29 +282,12 @@ namespace InstrumentsProcessor.Tables
                 },
             };
 
-            tableConfig.AddColumnRole(ColumnRole.StartTime, timeStampColumn);
+            tableConfig.AddColumnRole(ColumnRole.EndTime, timeStampColumn);
             tableConfig.AddColumnRole(ColumnRole.Duration, weightColumn);
+            tableConfig.AddColumnRole(ColumnRole.ResourceId, cpuIdColumn);
 
             tableBuilder.AddTableConfiguration(tableConfig);
             tableBuilder.SetDefaultTableConfiguration(tableConfig);
-        }
-
-        private struct ReduceTimeMinusDelta
-            : IFunc<int, Timestamp, TimestampDelta, Timestamp>
-        {
-            public Timestamp Invoke(int value, Timestamp timestamp, TimestampDelta delta)
-            {
-                return timestamp - delta;
-            }
-        }
-
-        private struct ReduceTimeSinceLastDiff
-            : IFunc<int, Timestamp, Timestamp, TimestampDelta>
-        {
-            public TimestampDelta Invoke(int value, Timestamp timeSinceLast1, Timestamp timeSinceLast2)
-            {
-                return timeSinceLast1 - timeSinceLast2;
-            }
         }
     }
 }

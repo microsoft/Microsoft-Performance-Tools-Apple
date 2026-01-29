@@ -19,6 +19,9 @@ namespace InstrumentsProcessor.Cookers
         public static readonly DataCookerPath DataCookerPath =
             DataCookerPath.ForSource(nameof(TraceSourceParser), nameof(TimeProfileCooker));
 
+        private IdleTimeTracker IdleTracker =
+            new IdleTimeTracker();
+
         public TimeProfileCooker()
             : base(DataCookerPath)
         {
@@ -38,9 +41,28 @@ namespace InstrumentsProcessor.Cookers
             ParsingContext context,
             CancellationToken cancellationToken)
         {
-            TimeProfileEvents.Add((TimeProfileEvent)data);
+            var tpevent = (TimeProfileEvent)data;
+            if ((tpevent.Thread == null) || (tpevent.Core == null))
+            {
+                return DataProcessingResult.Ignored;
+            }
+
+            SynthesizeIdleTime(tpevent);
+            TimeProfileEvents.Add(tpevent);
 
             return DataProcessingResult.Processed;
+        }
+
+        private void SynthesizeIdleTime(TimeProfileEvent tpevent)
+        {
+            Timestamp curr = tpevent.StartTime;
+            TimestampDelta idleGap = IdleTracker.Advance(tpevent.Core.CoreId, curr, tpevent.Weight.Value);
+
+            if (idleGap != TimestampDelta.Zero)
+            {
+                var idleEvent = TimeProfileEvent.MakeIdleEvent(tpevent.Core, curr, idleGap);
+                TimeProfileEvents.Add(idleEvent);
+            }
         }
     }
 }
