@@ -244,7 +244,7 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);
             tableBuilderWithRowCount.AddColumn(deviceSessionColumn, deviceSessionProjection);
             tableBuilderWithRowCount.AddColumn(cpuIdColumn, cpuIdProjection);
-            tableBuilderWithRowCount.AddColumn(cpuColumn, cpuIdProjection);
+            tableBuilderWithRowCount.AddColumn(cpuColumn, cpuProjection);
             tableBuilderWithRowCount.AddColumn(stateColumn, stateProjection);
             tableBuilderWithRowCount.AddColumn(weightColumn, weightProjection);
             tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
