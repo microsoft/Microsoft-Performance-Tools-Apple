@@ -21,6 +21,12 @@ namespace InstrumentsProcessor.Parsing.Events
         private readonly Dictionary<string, object> propertyDeserializersByName;
         private readonly Dictionary<string, object> propertyDeserializersByEngineeringType;
 
+        // Maps engineering type aliases to their canonical form used in Column attributes.
+        private static readonly Dictionary<string, string> engineeringTypeAliases = new Dictionary<string, string>
+        {
+            { "tagged-backtrace", "backtrace" },
+        };
+
         public EventDeserializer()
         {
             propertiesByColumn = new Dictionary<(string Name, string EngineeringType), PropertyInfo>();
@@ -40,11 +46,21 @@ namespace InstrumentsProcessor.Parsing.Events
             }
         }
 
+        private static string NormalizeEngineeringType(string engineeringType)
+        {
+            if (engineeringTypeAliases.TryGetValue(engineeringType, out string canonical))
+            {
+                return canonical;
+            }
+
+            return engineeringType;
+        }
+
         public bool CanDeserialize(Schema schema)
         {
             foreach (Schema.Column column in schema.Columns)
             {
-                if (!propertiesByColumn.ContainsKey((column.Name, column.EngineeringType)))
+                if (!propertiesByColumn.ContainsKey((column.Name, NormalizeEngineeringType(column.EngineeringType))))
                 {
                     return false;
                 }
@@ -69,7 +85,7 @@ namespace InstrumentsProcessor.Parsing.Events
             {
                 Schema.Column column = schema.Columns[i];
 
-                if (!propertiesByColumn.TryGetValue((column.Name, column.EngineeringType), out PropertyInfo property))
+                if (!propertiesByColumn.TryGetValue((column.Name, NormalizeEngineeringType(column.EngineeringType)), out PropertyInfo property))
                 {
                     throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
                 }
@@ -99,7 +115,7 @@ namespace InstrumentsProcessor.Parsing.Events
         {
             foreach (var column in schema.Columns)
             {
-                if (!propertiesByColumn.TryGetValue((column.Name, column.EngineeringType), out PropertyInfo property))
+                if (!propertiesByColumn.TryGetValue((column.Name, NormalizeEngineeringType(column.EngineeringType)), out PropertyInfo property))
                 {
                     throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
                 }

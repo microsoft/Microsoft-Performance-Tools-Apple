@@ -21,7 +21,22 @@ namespace InstrumentsProcessor.Parsing.DataModels
             {
                 List<Frame> frames = new List<Frame>();
 
-                foreach (XmlNode childNode in node)
+                // tagged-backtrace wraps a backtrace element plus additional data (e.g. uint64).
+                // Unwrap to the inner backtrace node that contains the frame elements.
+                XmlNode framesParent = node;
+                if (node.Name == "tagged-backtrace")
+                {
+                    foreach (XmlNode child in node.ChildNodes)
+                    {
+                        if (child.Name == "backtrace")
+                        {
+                            framesParent = child;
+                            break;
+                        }
+                    }
+                }
+
+                foreach (XmlNode childNode in framesParent)
                 {
                     frames.Add(FrameDeserializer.Deserialize(childNode, context));
                 }
