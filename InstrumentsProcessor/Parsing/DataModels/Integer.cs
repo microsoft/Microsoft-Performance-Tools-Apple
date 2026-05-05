@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Globalization;
 using System.Reflection;
 using System.Xml;
 
@@ -16,7 +17,20 @@ namespace InstrumentsProcessor.Parsing.DataModels
         {
             if (property.Name == "Value")
             {
-                return int.Parse(node.InnerText);
+                string text = node.InnerText;
+
+                if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    return int.Parse(text.Substring(2), NumberStyles.HexNumber);
+                }
+
+                if (int.TryParse(text, out int decimalValue))
+                {
+                    return decimalValue;
+                }
+
+                // Fallback: try parsing as hex without 0x prefix
+                return int.Parse(text, NumberStyles.HexNumber);
             }
             else
             {
