@@ -44,7 +44,12 @@ namespace InstrumentsProcessor.Tables
 
         public static int ThreadIdProjector(Thread thread)
         {
-            return thread?.ThreadId.Value ?? -1;
+            return thread?.ThreadId?.Value ?? -1;
+        }
+
+        public static string ThreadNameProjector(Thread thread)
+        {
+            return thread?.Name ?? "Unknown";
         }
 
         public static int ProcessIdProjector(Process process)
@@ -225,6 +230,21 @@ namespace InstrumentsProcessor.Tables
         internal static int SizeProjector(VirtualMemoryEvent e)
         {
             return e.Size.Value; 
+        }
+
+        internal static double SizeKBProjector(VirtualMemoryEvent e)
+        {
+            return e.Size.Value / 1024.0;
+        }
+
+        internal static double SizeMBProjector(VirtualMemoryEvent e)
+        {
+            return e.Size.Value / (1024.0 * 1024.0);
+        }
+
+        internal static double SizeGBProjector(VirtualMemoryEvent e)
+        {
+            return e.Size.Value / (1024.0 * 1024.0 * 1024.0);
         }
 
         public static Backtrace StackProjector(VirtualMemoryEvent e)

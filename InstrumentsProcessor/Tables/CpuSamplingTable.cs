@@ -61,6 +61,14 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("f7a2c3b1-6d8e-4a9f-b5c2-1e3d7f8a9b0c"), "Thread Name"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration threadIdColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("2ead4e1c-d9c8-427c-b9eb-23e5f17e5ad3"), "Thread ID"),
             new UIHints
@@ -191,6 +199,7 @@ namespace InstrumentsProcessor.Tables
             var timeStampProjection = baseProjection.Compose(Projector.TimeStampProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var processProjection = baseProjection.Compose(Projector.ProcessProjector);
             var processIdProjection = processProjection.Compose(Projector.ProcessIdProjector);
             var processNameProjection = processProjection.Compose(Projector.ProcessNameProjector);
@@ -216,6 +225,7 @@ namespace InstrumentsProcessor.Tables
                 Projection.VisibleDomainRelativePercent.Create(clippedWeightColumn);
 
             tableBuilderWithRowCount.AddColumn(timeStampColumn, timeStampProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);

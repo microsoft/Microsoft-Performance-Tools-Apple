@@ -63,6 +63,14 @@ namespace InstrumentsProcessor.Tables
                 Width = 100,
             });
 
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("a2b4c6d8-1e3f-5a7b-9c0d-2e4f6a8b0c1d"), "Thread Name"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration threadIdColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("3dbbcba5-decb-47b3-9932-e994643c792f"), "Thread Id"),
             new UIHints
@@ -148,6 +156,7 @@ namespace InstrumentsProcessor.Tables
             var processNameProjection = processProjection.Compose(Projector.ProcessNameProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var callProjection = baseProjection.Compose(Projector.CallProjector);
             var signatureProjection = baseProjection.Compose(Projector.SignatureProjector);
             var stackProjection = baseProjection.Compose(Projector.StackProjector);
@@ -158,6 +167,7 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(durationColumn, durationProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
             tableBuilderWithRowCount.AddColumn(processNameColumn, processNameProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
             tableBuilderWithRowCount.AddColumn(callColumn, callProjection);
             tableBuilderWithRowCount.AddColumn(signatureColumn, signatureProjection);

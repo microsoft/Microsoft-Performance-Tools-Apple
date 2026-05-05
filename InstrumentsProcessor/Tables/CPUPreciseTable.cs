@@ -56,6 +56,14 @@ namespace InstrumentsProcessor.Tables
                 CellFormat = TimestampFormatter.FormatMillisecondsGrouped
             });
 
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("d3a1b5c7-8e2f-4a6d-9c0b-5f7e3d1a2b4c"), "Thread Name"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration threadIdColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("6f332dcc-6a40-484c-95cb-4c30b2193015"), "Thread ID"),
             new UIHints
@@ -200,6 +208,7 @@ namespace InstrumentsProcessor.Tables
             var durationProjection = baseProjection.Compose(Projector.DurationProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var stateProjection = baseProjection.Compose(Projector.StateProjector);
             var processProjection = baseProjection.Compose(Projector.ProcessProjector);
             var processIdProjection = processProjection.Compose(Projector.ProcessIdProjector);
@@ -227,6 +236,7 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(switchInTimeColumn, switchInTimeProjection);
             tableBuilderWithRowCount.AddColumn(switchOutTimeColumn, switchOutTimeProjection);
             tableBuilderWithRowCount.AddColumn(durationColumn, durationProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
             tableBuilderWithRowCount.AddColumn(stateColumn, stateProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);

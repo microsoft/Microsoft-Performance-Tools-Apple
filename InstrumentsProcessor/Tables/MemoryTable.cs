@@ -47,6 +47,14 @@ namespace InstrumentsProcessor.Tables
                 CellFormat = TimestampFormatter.FormatMillisecondsGrouped
             });
 
+        private static readonly ColumnConfiguration threadNameColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("c8d9e0f1-2a3b-4c5d-6e7f-8a9b0c1d2e3f"), "Thread Name"),
+            new UIHints
+            {
+                IsVisible = true,
+                Width = 100,
+            });
+
         private static readonly ColumnConfiguration threadIdColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("85dd0f13-140b-4bd6-9554-1a8a2c1f0cd2"), "Thread ID"),
             new UIHints
@@ -125,6 +133,24 @@ namespace InstrumentsProcessor.Tables
               SortOrder = SortOrder.Descending
           });
 
+        private static readonly ColumnVariantProperties baseSizeProperties = new ColumnVariantProperties()
+        {
+            Label = "Bytes",
+            ColumnName = "Size",
+        };
+
+        private static readonly ColumnVariantDescriptor sizeKBDescriptor = new ColumnVariantDescriptor(
+            new Guid("6a7b8c9d-0e1f-2a3b-4c5d-6e7f8a9b0c1d"),
+            new ColumnVariantProperties { Label = "KB", ColumnName = "Size (KB)" });
+
+        private static readonly ColumnVariantDescriptor sizeMBDescriptor = new ColumnVariantDescriptor(
+            new Guid("7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e"),
+            new ColumnVariantProperties { Label = "MB", ColumnName = "Size (MB)" });
+
+        private static readonly ColumnVariantDescriptor sizeGBDescriptor = new ColumnVariantDescriptor(
+            new Guid("8c9d0e1f-2a3b-4c5d-6e7f-8a9b0c1d2e3f"),
+            new ColumnVariantProperties { Label = "GB", ColumnName = "Size (GB)" });
+
         private static readonly ColumnConfiguration stackColumn = new ColumnConfiguration(
             new ColumnMetadata(new Guid("1707206d-15e7-4c91-9d8d-8157f7cbb68b"), "Stack"),
             new UIHints
@@ -177,6 +203,7 @@ namespace InstrumentsProcessor.Tables
             var durationProjection = baseProjection.Compose(Projector.DurationProjector);
             var threadProjection = baseProjection.Compose(Projector.ThreadProjector);
             var threadIdProjection = threadProjection.Compose(Projector.ThreadIdProjector);
+            var threadNameProjection = threadProjection.Compose(Projector.ThreadNameProjector);
             var operationProjection = baseProjection.Compose(Projector.OperationProjector);
             var processProjection = baseProjection.Compose(Projector.ProcessProjector);
             var processIdProjection = processProjection.Compose(Projector.ProcessIdProjector);
@@ -186,10 +213,14 @@ namespace InstrumentsProcessor.Tables
             var waitTimeProjection = baseProjection.Compose(Projector.WaitTimeProjector);
             var addressProjection = baseProjection.Compose(Projector.AddressProjector);
             var sizeProjection = baseProjection.Compose(Projector.SizeProjector);
+            var sizeKBProjection = baseProjection.Compose(Projector.SizeKBProjector);
+            var sizeMBProjection = baseProjection.Compose(Projector.SizeMBProjector);
+            var sizeGBProjection = baseProjection.Compose(Projector.SizeGBProjector);
             var stackProjection = baseProjection.Compose(Projector.StackProjector);
 
             tableBuilderWithRowCount.AddColumn(startTimeColumn, startTimeProjection);
             tableBuilderWithRowCount.AddColumn(durationColumn, durationProjection);
+            tableBuilderWithRowCount.AddColumn(threadNameColumn, threadNameProjection);
             tableBuilderWithRowCount.AddColumn(threadIdColumn, threadIdProjection);
             tableBuilderWithRowCount.AddColumn(operationColumn, operationProjection);
             tableBuilderWithRowCount.AddColumn(processIdColumn, processIdProjection);
@@ -198,7 +229,17 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(cpuTimeColumn, cpuTimeProjection);
             tableBuilderWithRowCount.AddColumn(waitTimeColumn, waitTimeProjection);
             tableBuilderWithRowCount.AddColumn(addressColumn, addressProjection);
-            tableBuilderWithRowCount.AddColumn(sizeColumn, sizeProjection);
+            tableBuilderWithRowCount.AddColumnWithVariants(sizeColumn, sizeProjection, builder =>
+            {
+                return builder
+                    .WithModes(baseSizeProperties, modeBuilder =>
+                    {
+                        return modeBuilder
+                            .WithToggle(sizeKBDescriptor, sizeKBProjection)
+                            .WithToggle(sizeMBDescriptor, sizeMBProjection)
+                            .WithToggle(sizeGBDescriptor, sizeGBProjection);
+                    });
+            });
             tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn,
                 stackProjection, stackAccessProvider, builder =>
                 {
