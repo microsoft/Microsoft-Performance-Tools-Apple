@@ -64,19 +64,24 @@ namespace InstrumentsProcessor.Parsing
         {
             Timestamp? firstEventTimestamp = null;
             Timestamp? lastEventTimestamp = null;
+            DateTime? recordingStartUtc = null;
 
             foreach (IDataSource dataSource in dataSources)
             {
-                ProcessDataSource(dataSource, ref firstEventTimestamp, ref lastEventTimestamp, dataProcessor, progress, cancellationToken);
+                ProcessDataSource(dataSource, ref firstEventTimestamp, ref lastEventTimestamp, ref recordingStartUtc, dataProcessor, progress, cancellationToken);
             }
 
             long firstEventTimestampNanoseconds = firstEventTimestamp.HasValue ? firstEventTimestamp.Value.ToNanoseconds : 0;
             long lastEventTimestampnanoseconds = lastEventTimestamp.HasValue ? lastEventTimestamp.Value.ToNanoseconds : firstEventTimestampNanoseconds + 1;
-            DateTime firstEventWallClockUtc = DateTime.UtcNow;
+
+            // Anchor the trace's wall-clock to the recording's actual start time (from info/summary/start-date in the xctrace XML)
+            // rather than to load time. Using DateTime.UtcNow here causes WPA's session timeline to be offset by the elapsed time
+            // between recording and loading, misaligning this trace with other simultaneously-collected sources (e.g. Perfetto).
+            DateTime firstEventWallClockUtc = recordingStartUtc ?? DateTime.UtcNow;
             dataSourceInfo = new DataSourceInfo(firstEventTimestampNanoseconds, lastEventTimestampnanoseconds, firstEventWallClockUtc);
         }
 
-        public void ProcessDataSource(IDataSource dataSource, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp,
+        public void ProcessDataSource(IDataSource dataSource, ref Timestamp? firstEventTimestamp, ref Timestamp? lastEventTimestamp, ref DateTime? recordingStartUtc,
             ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor, IProgress<int> progress, CancellationToken cancellationToken)
         {
             if (!(dataSource is FileDataSource fileDataSource))
@@ -95,8 +100,15 @@ namespace InstrumentsProcessor.Parsing
             
             if (reader.Name == InfoName)
             {
-                // Try to parse the info section first to extract counter names
+                // Try to parse the info section first to extract counter names and the recording wall-clock anchor
                 ParseInfoSection(reader, xmlContext);
+
+                // Aggregate the earliest recording start across data sources, so multi-file loads still produce a coherent anchor.
+                if (xmlContext.RecordingStartUtc.HasValue &&
+                    (!recordingStartUtc.HasValue || xmlContext.RecordingStartUtc.Value < recordingStartUtc.Value))
+                {
+                    recordingStartUtc = xmlContext.RecordingStartUtc.Value;
+                }
             }
             
             if (reader.Name != TraceQueryResultName)
@@ -202,6 +214,17 @@ namespace InstrumentsProcessor.Parsing
             }
 
             xmlContext.SetCounterNames(counterNames);
+
+            // Extract the recording's wall-clock start time (ISO-8601 with offset) from info/summary/start-date.
+            // This anchors WPA's wall-clock for the trace to when it was *recorded*, not when it was *loaded*.
+            XmlNode startDateNode = infoNode.SelectSingleNode(".//summary/start-date");
+            if (startDateNode != null && !string.IsNullOrWhiteSpace(startDateNode.InnerText))
+            {
+                if (DateTimeOffset.TryParse(startDateNode.InnerText.Trim(), out DateTimeOffset startDateOffset))
+                {
+                    xmlContext.SetRecordingStartUtc(startDateOffset.UtcDateTime);
+                }
+            }
         }
     }
 }
