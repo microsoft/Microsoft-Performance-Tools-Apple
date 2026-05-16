@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Collections.Generic;
 
 namespace InstrumentsProcessor.Parsing
@@ -21,6 +22,13 @@ namespace InstrumentsProcessor.Parsing
         /// </summary>
         public IReadOnlyList<string> CounterNames { get; private set; }
 
+        /// <summary>
+        /// The wall-clock UTC time at which the trace recording started, parsed from
+        /// info/summary/start-date in the xctrace XML export. Null if not present in
+        /// the input.
+        /// </summary>
+        public DateTime? RecordingStartUtc { get; private set; }
+
         public XmlParsingContext()
         {
             ObjectCache = new ObjectCache();
@@ -34,6 +42,14 @@ namespace InstrumentsProcessor.Parsing
         public void SetCounterNames(IList<string> counterNames)
         {
             CounterNames = new List<string>(counterNames);
+        }
+
+        /// <summary>
+        /// Sets the recording wall-clock start time captured from the info section.
+        /// </summary>
+        public void SetRecordingStartUtc(DateTime recordingStartUtc)
+        {
+            RecordingStartUtc = recordingStartUtc;
         }
     }
 }
