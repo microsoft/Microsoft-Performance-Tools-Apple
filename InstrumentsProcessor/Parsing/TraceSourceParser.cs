@@ -76,7 +76,7 @@ namespace InstrumentsProcessor.Parsing
 
             // Anchor the trace's wall-clock to the recording's actual start time (from info/summary/start-date in the xctrace XML)
             // rather than to load time. Using DateTime.UtcNow here causes WPA's session timeline to be offset by the elapsed time
-            // between recording and loading, misaligning this trace with other simultaneously-collected sources (e.g. Perfetto).
+            // between recording and loading, misaligning this trace with other simultaneously-collected sources
             DateTime firstEventWallClockUtc = recordingStartUtc ?? DateTime.UtcNow;
             dataSourceInfo = new DataSourceInfo(firstEventTimestampNanoseconds, lastEventTimestampnanoseconds, firstEventWallClockUtc);
         }
