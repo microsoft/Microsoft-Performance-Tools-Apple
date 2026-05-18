@@ -40,6 +40,7 @@ xctrace export --input $input_file --xpath '/trace-toc/run[@number="1"]/data/tab
 xctrace export --input $input_file --toc | xmllint --xpath '//info' - > $output_file
 
 schemas=(
+    "life-cycle-period"
     "ane-hw-intervals-internal"
     "time-profile"
     "counters-profile"

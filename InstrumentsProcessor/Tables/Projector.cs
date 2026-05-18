@@ -565,5 +565,46 @@ namespace InstrumentsProcessor.Tables
         {
             return e.Color?.Value ?? 0;
         }
+
+        // Life Cycle Period Event Projectors
+        public static Timestamp StartTimeProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Start.Value;
+        }
+
+        public static Timestamp StopTimeProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Start.Value + e.Duration.Value;
+        }
+
+        public static TimestampDelta DurationProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Duration.Value;
+        }
+
+        public static string GroupProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Group?.Value ?? "Unknown";
+        }
+
+        public static int LayoutIdProjector(LifeCyclePeriodEvent e)
+        {
+            return e.LayoutId?.Value ?? 0;
+        }
+
+        public static Process ProcessProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Process;
+        }
+
+        public static string LifecyclePeriodProjector(LifeCyclePeriodEvent e)
+        {
+            return e.LifecyclePeriod?.Value ?? "Unknown";
+        }
+
+        public static string NarrativeProjector(LifeCyclePeriodEvent e)
+        {
+            return e.Narrative?.Value ?? string.Empty;
+        }
     }
 }

@@ -40,6 +40,7 @@ namespace InstrumentsProcessor.Parsing
             new EventDeserializer<DisplayVsyncIntervalEvent>(),
             new EventDeserializer<CountersProfileEvent>(),
             new EventDeserializer<AneHwIntervalEvent>(),
+            new EventDeserializer<LifeCyclePeriodEvent>(),
         });
 
         private ParsingContext context;
