@@ -29,7 +29,29 @@ If it is necessary to load additional symbols, please refer to this section.
 
 ![symbol_load](https://github.com/user-attachments/assets/99e33ce1-c0ca-4ce0-9811-74b31da2b091)
 
--   Note: Symbol decoding is performed on the Mac when the trace is captured, and cannot be done on Windows later
+-   Instruments can save symbol information with the trace. The direct `.trace` loader can resolve these bundled symbols on Windows; missing names still require matching external symbols.
+
+### Direct Trace Symbol Resolution
+
+Open a `.trace` directory (or its `open.creq` marker) or a ZIP bundle named `.trace` with the direct loader. XML import remains supported and unchanged.
+
+The loader reads runtime image mappings from the compressed `form.template` and version-7 `.symbolsarchive` files from `symbols/stores`. It resolves addresses using the recorded run, process, user/kernel address space, image UUID, architecture, and load lifetime. Shared-cache images use the cache UUID and recorded cache load address. No Mac-side XML export is required for this path.
+
+Image signature start/end fields are treated as Mach load timestamps, with `start <= sample < end`; `0` and `Int64.MaxValue` are treated as unbounded. This interpretation and kernel symbol coordinates are working assumptions: user-space resolution has been checked against recorded stacks, while kernel resolution and unload/reload behavior have synthetic tests but still need real reference captures. Unsupported supplemental history or ambiguous ownership stays unresolved instead of using a guessed slide.
+
+The stack keeps its original runtime addresses. Missing or placeholder names display the module and offset when ownership is known. A missing symbol archive does not mean the module was absent. Supported callstack types include `XRBacktraceTypeID`, tagged backtraces, and `XRCoreProfileCallstackTypeID`; the latter's user/kernel fields are also inspectable with the diagnostic even when the raw store has no table in WPA.
+
+Optional external dSYMs, Mach-O files, and `manifest.json`/`symbols.nm` stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin. Recorded mappings take precedence over external `load_addr`; external symbols must match the image UUID and architecture. Valid bundled names take precedence, and external names can fill missing or placeholder entries. Archives with incompatible layouts or corrupt bounds produce warnings rather than guessed names.
+
+To inspect one recorded stack using the production resolver:
+
+```powershell
+dotnet run --project DiagTrace/DiagTrace.csproj -c Release -- <trace-path> --run 1 --pid 722 --stack-ref 10 --limit 1
+```
+
+Omit `--pid` and `--stack-ref` to sample available stacks; add `--kernel` to inspect kernel stacks. The diagnostic reports named, module-only, missing-map/archive, and ambiguous results separately. It does not infer missing CPU samples or construct new event tables.
+
+For the optional real-trace regression test, set `INSTRUMENTS_TEST_TRACE` to the `20260707_155842_snap001_TabSwitchPaint_NFL1.trace` fixture and run `dotnet test InstrumentsProcessorTests/InstrumentsProcessorTests.csproj -c Release --filter FullyQualifiedName~SymbolResolutionTests`. Without that local fixture, the real-trace test is explicitly skipped; all synthetic tests still run.
 
 ### [xctrace](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 

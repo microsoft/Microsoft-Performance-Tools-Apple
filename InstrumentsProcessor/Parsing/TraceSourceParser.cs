@@ -235,12 +235,16 @@ namespace InstrumentsProcessor.Parsing
         {
             var runs = FindRuns(traceDir);
             if (runs.Count == 0) return;
+            var symbols = SymbolCatalog.Load(traceDir, cancellationToken);
+            foreach (string message in symbols.Diagnostics) logger?.Warn($"[InstrumentsProcessor] {message}");
+            MergeExternalDsyms(symbols, logger);
 
             for (int runIdx = 0; runIdx < runs.Count; runIdx++)
             {
                 var (runName, corePath) = runs[runIdx];
+                if (!int.TryParse(runName.Substring(3), out int runNumber)) continue;
                 ProcessTraceRun(corePath, traceDir, ref firstEventTimestamp, ref lastEventTimestamp,
-                    dataProcessor, logger, progress, cancellationToken);
+                    dataProcessor, logger, progress, cancellationToken, symbols, runNumber);
 
                 // Report progress per run
                 progress?.Report((runIdx + 1) * 100 / runs.Count);
@@ -269,7 +273,8 @@ namespace InstrumentsProcessor.Parsing
             ISourceDataProcessor<Event, ParsingContext, Type> dataProcessor,
             ILogger logger,
             IProgress<int> progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            SymbolCatalog symbols, int runNumber)
         {
             // Load uniquing
             var uniquingDir = Path.Combine(corePath, "uniquing");
@@ -289,16 +294,6 @@ namespace InstrumentsProcessor.Parsing
 
             // Build thread ref→(tid,pid) map from thread-info stores
             var threadRefMap = NameResolver.BuildThreadRefMap(storesInfo, uniquing);
-
-            // Load symbol catalog for address → image+offset resolution
-            var symbols = SymbolCatalog.Load(traceDir);
-
-            // Merge external dSYMs from INSTRUMENTS_SYMBOL_PATH (semicolon-separated,
-            // like _NT_SYMBOL_PATH). This lets users symbolicate images that Instruments
-            // did not have symbols for at capture time (e.g. Microsoft Edge Helper).
-            // Each dSYM is matched to a loaded image by UUID; symbols are placed at the
-            // image's runtime __TEXT vmaddr recorded in the trace's .symbolsarchive.
-            MergeExternalDsyms(symbols, logger);
 
             // Intern cache to deduplicate Thread/Process/String objects across events
             var internCache = new TraceBundleEventFactory.InternCache();
@@ -336,7 +331,7 @@ namespace InstrumentsProcessor.Parsing
                     if (cancellationToken.IsCancellationRequested) break;
 
                     Event e = TraceBundleEventFactory.CreateEvent(
-                        eventType, mappings, row, uniquing, pidNames, schema, internCache, symbols, processRefMap, threadRefMap);
+                        eventType, mappings, row, uniquing, pidNames, schema, internCache, symbols, processRefMap, threadRefMap, runNumber);
 
                     dataProcessor.ProcessDataElement(e, context, cancellationToken);
 
@@ -439,7 +434,7 @@ namespace InstrumentsProcessor.Parsing
             {
                 file = new StreamWriter(logPath, append: true) { AutoFlush = true };
                 file.WriteLine();
-                file.WriteLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} InstrumentsProcessor symbol merge (build 2026-07-14h: prefer manifest load_addr over trace shared-cache file-offset) =====");
+                file.WriteLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} InstrumentsProcessor symbol merge (recorded image mappings) =====");
             }
             catch { file = null; }
 
@@ -452,15 +447,13 @@ namespace InstrumentsProcessor.Parsing
                     $"  (auto-detected: '{autoPath ?? "<none>"}', {InstrumentsSymbolPathEnvVar}='{envVal ?? "<unset>"}')");
                 EmitDiag(logger, file, "info",
                     $"[InstrumentsProcessor] Trace catalog holds {catalogImageCount} image(s) with __TEXT segments " +
-                    "(from .symbolsarchive). Only dSYMs whose UUID matches one of these images can be applied.");
+                    "(from saved runtime mappings). External symbols must match the recorded image UUID and architecture.");
 
                 if (catalogImageCount == 0)
                 {
                     EmitDiag(logger, file, "warn",
-                        "[InstrumentsProcessor] The trace bundle has no .symbolsarchive image " +
-                        "entries. dSYM merging cannot infer runtime load addresses. " +
-                        "Re-capture the trace on the Mac with Instruments Symbols configured, or " +
-                        "run 'xctrace symbolicate' on the Mac against these dSYMs.");
+                        "[InstrumentsProcessor] No supported runtime image mappings were decoded. " +
+                        "External symbols alone cannot identify the owning process or image load address.");
                 }
 
                 int totalUnmatched = 0;
@@ -502,9 +495,7 @@ namespace InstrumentsProcessor.Parsing
                             EmitDiag(logger, file, "info",
                                 $"[InstrumentsProcessor]   MATCH: {d.ImageName} " +
                                 $"[{d.Uuid}] → {d.FunctionsAdded} symbols " +
-                                $"(runtime __TEXT=0x{d.RuntimeTextBase:X}, " +
-                                $"file __TEXT=0x{d.DsymTextBase:X}, " +
-                                $"slide=0x{unchecked(d.RuntimeTextBase - d.DsymTextBase):X})");
+                                "(runtime placement selected per process and load lifetime)");
                         }
                         else
                         {

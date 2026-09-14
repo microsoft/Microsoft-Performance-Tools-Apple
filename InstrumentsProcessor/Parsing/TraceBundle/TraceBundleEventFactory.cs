@@ -68,6 +68,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             public PropertyInfo Property { get; set; }
             public string RowKey { get; set; } // "timestamp", "duration", or a mnemonic
             public ValueKind Kind { get; set; }
+            public string EngineeringType { get; set; }
+            public bool Kernel { get; set; }
         }
 
         public static bool IsSchemaSupported(string schemaName) =>
@@ -133,7 +135,9 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 {
                     Property = property,
                     RowKey = rowKey,
-                    Kind = kind
+                    Kind = kind,
+                    EngineeringType = col.EngineeringType,
+                    Kernel = col.Mnemonic == "cp-kernel-callstack"
                 });
             }
 
@@ -175,7 +179,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             private readonly Dictionary<string, String> _strings = new Dictionary<string, String>();
             private readonly Dictionary<long, TimestampDelta> _deltas = new Dictionary<long, TimestampDelta>();
             private readonly Dictionary<int, Integer> _integers = new Dictionary<int, Integer>();
-            private readonly Dictionary<int, Backtrace> _backtraces = new Dictionary<int, Backtrace>();
+            private readonly Dictionary<(int Reference, string Encoding), DecodedBacktrace> _rawBacktraces = new();
+            private readonly Dictionary<(int Reference, string Encoding, ImageScope Scope, int Generation, bool Kernel), Backtrace> _backtraces = new();
             private static readonly Boolean TrueVal = new Boolean(true);
             private static readonly Boolean FalseVal = new Boolean(false);
             private static readonly PmcEvents EmptyPmc = new PmcEvents(new Dictionary<string, long>());
@@ -333,15 +338,58 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
 
             public PmcEvents GetEmptyPmc() => EmptyPmc;
 
-            public Backtrace GetOrCreateBacktrace(int refIdx, Uniquing uniquing, SymbolCatalog symbols)
+            public Backtrace GetOrCreateBacktrace(int refIdx, Uniquing uniquing, SymbolCatalog symbols,
+                SymbolContext context = null, string engineeringType = "backtrace")
             {
-                if (!_backtraces.TryGetValue(refIdx, out var bt))
+                var rawKey = (refIdx, engineeringType);
+                if (!_rawBacktraces.TryGetValue(rawKey, out var decoded))
+                    _rawBacktraces[rawKey] = decoded = uniquing.DecodeBacktrace(refIdx, engineeringType);
+                context = ContextForBacktrace(decoded, context);
+                var scope = symbols?.Mappings.GetScope(context);
+                var key = (refIdx, engineeringType, scope, scope?.GetGeneration(context.Timestamp) ?? -1, context?.Kernel ?? false);
+                if (!_backtraces.TryGetValue(key, out var bt))
                 {
-                    bt = new LazyBacktrace(uniquing.ResolveBacktrace(refIdx), symbols);
-                    _backtraces[refIdx] = bt;
+                    bt = new LazyBacktrace(decoded.Addresses, symbols, context);
+                    _backtraces[key] = bt;
                 }
                 return bt;
             }
+        }
+
+        internal static SymbolContext ContextForBacktrace(DecodedBacktrace decoded, SymbolContext context)
+        {
+            if (context == null || context.Kernel || !decoded.ProcessId.HasValue) return context;
+            return context with { ProcessId = context.ProcessId < 0 || context.ProcessId == decoded.ProcessId.Value
+                ? decoded.ProcessId.Value : long.MinValue };
+        }
+
+        internal static SymbolContext GetSymbolContext(Dictionary<string, object> row, StoreSchema schema,
+            Uniquing uniquing, int run,
+            Dictionary<int, (long pid, string name)> processes = null,
+            Dictionary<int, (long tid, long pid, string name)> threads = null)
+        {
+            long pid = -1;
+            foreach (var column in schema.Columns)
+            {
+                bool processColumn = column.EngineeringType == "XRProcessTypeID";
+                bool threadColumn = column.EngineeringType == "XRThreadTypeID";
+                if (!processColumn && !threadColumn) continue;
+                string key = column.TopoField == "XRCategory1FieldID" ? "__cat1__" :
+                    column.TopoField == "XRCategory2FieldID" ? "__cat2__" : column.Mnemonic;
+                if (!row.TryGetValue(key, out var value)) continue;
+                int reference = RawToInt32(value);
+                if (reference < 0) continue;
+                if (processColumn)
+                {
+                    pid = processes != null && processes.TryGetValue(reference, out var process)
+                        ? process.pid : uniquing.ResolveProcess(reference);
+                    break;
+                }
+                pid = threads != null && threads.TryGetValue(reference, out var thread)
+                    ? thread.pid : uniquing.ResolveThread(reference).pid;
+            }
+            long time = row.TryGetValue("timestamp", out var timestamp) ? checked((long)Convert.ToUInt64(timestamp)) : 0;
+            return new SymbolContext(run, pid, time);
         }
 
         // Pre-compiled event factories to avoid Activator.CreateInstance overhead
@@ -370,10 +418,13 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             InternCache internCache,
             SymbolCatalog symbols = null,
             Dictionary<int, (long pid, string name)> refMap = null,
-            Dictionary<int, (long tid, long pid, string name)> threadRefMap = null)
+            Dictionary<int, (long tid, long pid, string name)> threadRefMap = null,
+            int runNumber = 1)
         {
             var evt = CreateEventInstance(eventType);
             evt.SchemaName = schema.SchemaName;
+            var symbolContext = mappings.Any(mapping => mapping.Kind == ValueKind.Backtrace)
+                ? GetSymbolContext(row, schema, uniquing, runNumber, refMap, threadRefMap) : null;
 
             foreach (var mapping in mappings)
             {
@@ -390,7 +441,10 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                     continue;
                 }
 
-                object dataModelValue = ConvertValue(mapping.Kind, rawValue, uniquing, pidNames, schema, internCache, symbols, refMap, threadRefMap);
+                object dataModelValue = mapping.Kind == ValueKind.Backtrace
+                    ? internCache.GetOrCreateBacktrace(RawToInt32(rawValue), uniquing, symbols,
+                        symbolContext with { Kernel = mapping.Kernel }, mapping.EngineeringType)
+                    : ConvertValue(mapping.Kind, rawValue, uniquing, pidNames, schema, internCache, symbols, refMap, threadRefMap);
                 if (dataModelValue != null)
                 {
                     mapping.Property.SetValue(evt, dataModelValue);

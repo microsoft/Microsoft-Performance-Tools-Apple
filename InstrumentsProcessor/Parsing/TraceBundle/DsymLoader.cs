@@ -25,14 +25,17 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
         /// <summary>
         /// Optional: the runtime load address of the image as observed on the Mac at
         /// capture time (from the symbol-store manifest's <c>load_addr</c> field).
-        /// Used as a fallback runtime <c>__TEXT</c> base when the trace's
-        /// <c>.symbolsarchive</c> has no entry for this UUID.
+        /// Retained to identify RVA-based stores; recorded trace mappings remain
+        /// authoritative for runtime placement.
         /// </summary>
         public ulong? LoadAddr { get; }
+        public uint? CpuType { get; }
+        public uint? CpuSubtype { get; }
         public IReadOnlyList<DsymFunction> Functions { get; }
 
         public DsymImage(string uuid, string imageName, ulong textVmAddr, ulong textVmSize,
-                         IReadOnlyList<DsymFunction> functions, ulong? loadAddr = null)
+                 IReadOnlyList<DsymFunction> functions, ulong? loadAddr = null,
+                 uint? cpuType = null, uint? cpuSubtype = null)
         {
             Uuid = uuid;
             ImageName = imageName;
@@ -40,6 +43,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             TextVmSize = textVmSize;
             Functions = functions;
             LoadAddr = loadAddr;
+            CpuType = cpuType;
+            CpuSubtype = cpuSubtype;
         }
     }
 
@@ -320,7 +325,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             if (functions.Count == 0)
                 return null;
 
-            return new DsymImage(uuid, imageName, textVmAddr, textVmSize, functions);
+            return new DsymImage(uuid, imageName, textVmAddr, textVmSize, functions,
+                cpuType: ReadU32(data, baseOff + 4, bigEndian), cpuSubtype: ReadU32(data, baseOff + 8, bigEndian));
         }
 
         /// <summary>

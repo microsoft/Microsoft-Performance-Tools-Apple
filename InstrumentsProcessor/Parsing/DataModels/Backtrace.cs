@@ -64,27 +64,30 @@ namespace InstrumentsProcessor.Parsing.DataModels
     {
         private readonly ulong[] _addresses;
         private readonly TraceBundle.SymbolCatalog _symbols;
+        private readonly TraceBundle.SymbolContext _symbolContext;
         private IReadOnlyList<Frame> _frames;
 
-        internal LazyBacktrace(ulong[] addresses, TraceBundle.SymbolCatalog symbols = null)
+        internal LazyBacktrace(ulong[] addresses, TraceBundle.SymbolCatalog symbols = null,
+            TraceBundle.SymbolContext symbolContext = null)
         {
             _addresses = addresses;
             _symbols = symbols;
+            _symbolContext = symbolContext;
         }
 
         public override IReadOnlyList<Frame> Frames
         {
             get
             {
-                if (_frames == null)
+                return System.Threading.LazyInitializer.EnsureInitialized(ref _frames, () =>
                 {
                     if (_addresses == null || _addresses.Length == 0)
                     {
-                        _frames = Array.Empty<Frame>();
+                        return Array.Empty<Frame>();
                     }
                     else if (_symbols != null)
                     {
-                        _frames = _symbols.ResolveBacktrace(_addresses);
+                        return _symbols.ResolveBacktrace(_addresses, _symbolContext);
                     }
                     else
                     {
@@ -93,10 +96,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
                         {
                             frames[i] = new Frame(new Function(null, $"0x{_addresses[i]:x}"));
                         }
-                        _frames = frames;
+                        return frames;
                     }
-                }
-                return _frames;
+                });
             }
         }
     }

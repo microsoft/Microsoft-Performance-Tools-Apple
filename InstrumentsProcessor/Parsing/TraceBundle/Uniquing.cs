@@ -10,6 +10,8 @@ using System.Linq;
 
 namespace InstrumentsProcessor.Parsing.TraceBundle
 {
+    internal sealed record DecodedBacktrace(ulong[] Addresses, long? ProcessId = null);
+
     /// <summary>
     /// Loads the uniquing data (strings and arrays) from a .trace bundle's
     /// corespace/run/core/uniquing directory. Used to resolve reference indices
@@ -261,25 +263,27 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             return vals;
         }
 
-        /// <summary>
-        /// Resolve a tagged backtrace reference → array of frame addresses.
-        /// A tagged backtrace entry contains [backtrace_ref, metadata_ref].
-        /// The first element points to another array entry with the actual frame addresses.
-        /// </summary>
-        public ulong[] ResolveBacktrace(int refIdx)
+        public DecodedBacktrace DecodeBacktrace(int refIdx, string engineeringType)
         {
             var entry = GetArray(refIdx);
             if (entry == null || entry.Length == 0)
-                return entry;
-
-            // If the entry has large values (> 0x100000), they're direct addresses — return as-is
-            if (entry.Length > 2 && entry[0] > 0x100000)
-                return entry;
-
-            // Tagged backtrace: entry[0] is a reference to the actual frame array
-            int frameRef = (int)entry[0];
-            var frames = GetArray(frameRef);
-            return frames ?? entry;
+                return new DecodedBacktrace(Array.Empty<ulong>());
+            if (engineeringType == "XRCoreProfileCallstackTypeID")
+            {
+                if (entry.Length != 5 || entry[0] > int.MaxValue || entry[2] > int.MaxValue)
+                    return new DecodedBacktrace(Array.Empty<ulong>());
+                var process = GetArray((int)entry[2]);
+                long? pid = process != null && process.Length >= 1 ? (long)(uint)process[0] : null;
+                return new DecodedBacktrace(GetArray((int)entry[0]) ?? Array.Empty<ulong>(), pid);
+            }
+            if (engineeringType?.IndexOf("TaggedBacktrace", StringComparison.OrdinalIgnoreCase) >= 0 || engineeringType == "tagged-backtrace")
+                return new DecodedBacktrace(entry.Length == 2 && entry[0] <= int.MaxValue
+                    ? GetArray((int)entry[0]) ?? Array.Empty<ulong>() : Array.Empty<ulong>());
+            if (engineeringType == "backtrace" || engineeringType == "XRBacktraceTypeID")
+                return new DecodedBacktrace(entry);
+            return new DecodedBacktrace(Array.Empty<ulong>());
         }
+
+        public ulong[] ResolveBacktrace(int refIdx) => DecodeBacktrace(refIdx, "backtrace").Addresses;
     }
 }

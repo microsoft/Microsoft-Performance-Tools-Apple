@@ -96,6 +96,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             string uuid = null;
             string module = null;
             ulong? loadAddr = null;
+            uint? cpuType = null, cpuSubtype = null;
 
             try
             {
@@ -107,6 +108,17 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                         uuid = u.GetString();
                     if (doc.RootElement.TryGetProperty("module", out var m) && m.ValueKind == JsonValueKind.String)
                         module = m.GetString();
+                    if (doc.RootElement.TryGetProperty("arch", out var architecture) && architecture.ValueKind == JsonValueKind.String)
+                    {
+                        switch (architecture.GetString())
+                        {
+                            case "arm64": cpuType = 0x100000c; cpuSubtype = 0; break;
+                            case "arm64e": cpuType = 0x100000c; cpuSubtype = 2; break;
+                            case "x86_64": cpuType = 0x1000007; cpuSubtype = 3; break;
+                            case "x86_64h": cpuType = 0x1000007; cpuSubtype = 8; break;
+                            default: return null;
+                        }
+                    }
                     // load_addr may be either a hex string (e.g. "0x187d9b000") or a
                     // decimal number. When present, it is the runtime __TEXT vmaddr
                     // observed for this image in the traced process.
@@ -168,7 +180,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             var functions = ParseSymbolsNm(symbolsPath, isRvaFormat, out ulong textVmAddr, out ulong textVmSize);
             if (functions.Count == 0) return null;
 
-            return new DsymImage(uuid, module, textVmAddr, textVmSize, functions, loadAddr);
+            return new DsymImage(uuid, module, textVmAddr, textVmSize, functions, loadAddr, cpuType, cpuSubtype);
         }
 
         /// <summary>
