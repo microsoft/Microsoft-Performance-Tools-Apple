@@ -12,6 +12,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public ulong Value { get; private set; }
 
+        public UInt64() { }
+        internal UInt64(ulong value) { Value = value; }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Value")

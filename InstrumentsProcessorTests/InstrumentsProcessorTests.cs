@@ -129,6 +129,72 @@ namespace InstrumentsProcessorTests
             }
         }
 
+        [Fact]
+        public void OsSignpostParsingTest()
+        {
+            string inputFilePath = @"TestData\os_signpost_trace.xml";
+            Assert.True(File.Exists(inputFilePath));
+
+            string? pluginPath = Path.GetDirectoryName(typeof(InstrumentsProcessor.InstrumentsProcessingSource).Assembly.Location);
+            Assert.NotNull(pluginPath);
+
+            using PluginSet plugins = PluginSet.Load(pluginPath);
+            using DataSourceSet dataSources = DataSourceSet.Create(plugins);
+            dataSources.AddFile(inputFilePath);
+
+            EngineCreateInfo createInfo = new EngineCreateInfo(dataSources.AsReadOnly());
+            using Engine engine = Engine.Create(createInfo);
+
+            engine.EnableCooker(InstrumentsProcessor.Cookers.OsSignpostCooker.DataCookerPath);
+
+            RuntimeExecutionResults results = engine.Process();
+
+            var events = results.QueryOutput<List<InstrumentsProcessor.Parsing.Events.OsSignpostEvent>>(
+                new DataOutputPath(
+                    InstrumentsProcessor.Cookers.OsSignpostCooker.DataCookerPath,
+                    nameof(InstrumentsProcessor.Cookers.OsSignpostCooker.OsSignpostEvents)));
+
+            Assert.NotNull(events);
+            Assert.Equal(3, events.Count);
+
+            // Only End events are kept. StartTime = EndTime - Value(ms).
+
+            // First event: Launch Time (End), instance=1, value=1109.45ms
+            var launchTime = events[0];
+            Assert.Equal("End", launchTime.EventType.Value);
+            Assert.Equal("BrowserBenchmarkMetric", launchTime.SignpostName.Value);
+            Assert.Equal("com.browserbenchmark.trace", launchTime.Subsystem.Value);
+            Assert.Equal("metrics", launchTime.Category.Value);
+            Assert.Equal("Launch Time", launchTime.Metadata.EventName);
+            Assert.Equal(1109.45, launchTime.Metadata.NumericValue);
+            Assert.True(launchTime.Metadata.Parameters.TryGetValue("outer", out string? outer));
+            Assert.Equal("1", outer);
+            Assert.True(launchTime.Metadata.Parameters.TryGetValue("instance", out string? instance));
+            Assert.Equal("1", instance);
+            Assert.False(launchTime.Metadata.Parameters.ContainsKey("page"));
+
+            // Second event: FCP (End), page=NFL, value=552ms
+            var fcp = events[1];
+            Assert.Equal("End", fcp.EventType.Value);
+            Assert.Equal("FCP", fcp.Metadata.EventName);
+            Assert.Equal(552.0, fcp.Metadata.NumericValue);
+            Assert.True(fcp.Metadata.Parameters.TryGetValue("page", out string? page));
+            Assert.Equal("NFL", page);
+
+            // Third event: PageLoad (End), page=NFL, no numeric value
+            var pageLoad = events[2];
+            Assert.Equal("End", pageLoad.EventType.Value);
+            Assert.Equal("BrowserBenchmark", pageLoad.SignpostName.Value);
+            Assert.Equal("PageLoad", pageLoad.Metadata.EventName);
+            Assert.Null(pageLoad.Metadata.NumericValue);
+            Assert.True(pageLoad.Metadata.Parameters.TryGetValue("page", out string? plPage));
+            Assert.Equal("NFL", plPage);
+
+            // Verify process info
+            Assert.Equal("python3.12 (773)", launchTime.Process.Name);
+            Assert.Equal(773, launchTime.Process.ProcessId.Value);
+        }
+
         private class StubVisibleDomainRegion
             : IVisibleDomainRegion
         {

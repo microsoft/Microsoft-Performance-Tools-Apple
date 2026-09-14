@@ -60,7 +60,7 @@ namespace InstrumentsProcessor.AccessProviders
 
         public string GetValue(Backtrace collection, int index)
         {
-            if (collection == null || collection.Frames.Count == 0)
+            if (collection == null || collection.Frames == null || collection.Frames.Count == 0)
             {
                 return "NA!NA";
             }
@@ -77,7 +77,9 @@ namespace InstrumentsProcessor.AccessProviders
                     return "NA!NA";
                 }
 
-                return $"{frame.Module.Name}!{frame.Function.Name}";
+                string modName0 = frame.Module?.Name ?? "Unknown";
+                string funcName0 = frame.Function?.Name ?? "NA";
+                return $"{modName0}!{funcName0}";
             }
 
             frame = collection.Frames[count-(index+1)];
@@ -87,12 +89,14 @@ namespace InstrumentsProcessor.AccessProviders
                 return "NA!NA";
             }
 
-            return $"{frame.Module.Name}!{frame.Function.Name}";
+            string modName = frame.Module?.Name ?? "Unknown";
+            string funcName = frame.Function?.Name ?? "NA";
+            return $"{modName}!{funcName}";
         }
 
         public bool IsNull(Backtrace value)
         {
-            if (value == null || value.Frames.Count == 0)
+            if (value == null || value.Frames == null || value.Frames.Count == 0)
                 return true;
 
             return false;

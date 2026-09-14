@@ -11,6 +11,13 @@ namespace InstrumentsProcessor.Parsing.Events
         public string Name { get; }
         public string EngineeringType { get; }
 
+        /// <summary>
+        /// Optional mnemonic for disambiguating schema columns that share the same
+        /// display Name and EngineeringType (e.g. two "Duration" columns). When set,
+        /// the deserializer prefers matching by (Mnemonic, EngineeringType).
+        /// </summary>
+        public string Mnemonic { get; set; }
+
         public ColumnAttribute(string name, string engineeringType)
         {
             Name = name;

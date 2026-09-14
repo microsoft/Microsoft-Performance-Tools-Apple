@@ -18,6 +18,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Performance.SDK" Version="1.3.13-preview" />
+    <PackageReference Include="plist-cil" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DiagTrace" />
+    <InternalsVisibleTo Include="InstrumentsProcessorTests" />
   </ItemGroup>
 
   <ItemGroup>

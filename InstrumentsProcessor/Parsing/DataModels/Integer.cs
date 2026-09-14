@@ -11,7 +11,10 @@ namespace InstrumentsProcessor.Parsing.DataModels
     public class Integer : IPropertyDeserializer
     {
         [CustomDeserialization]
-        public int Value { get; private set; }
+        public long Value { get; private set; }
+
+        public Integer() { }
+        internal Integer(int value) { Value = value; }
 
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
@@ -21,16 +24,16 @@ namespace InstrumentsProcessor.Parsing.DataModels
 
                 if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
-                    return int.Parse(text.Substring(2), NumberStyles.HexNumber);
+                    return unchecked((long)ulong.Parse(text.Substring(2), NumberStyles.HexNumber));
                 }
 
-                if (int.TryParse(text, out int decimalValue))
+                if (long.TryParse(text, out long decimalValue))
                 {
                     return decimalValue;
                 }
 
                 // Fallback: try parsing as hex without 0x prefix
-                return int.Parse(text, NumberStyles.HexNumber);
+                return unchecked((long)ulong.Parse(text, NumberStyles.HexNumber));
             }
             else
             {
