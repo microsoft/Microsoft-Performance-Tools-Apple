@@ -309,6 +309,9 @@ namespace InstrumentsProcessor.Parsing
                 processableStores.Add(si);
             }
 
+            var switchStacks = processableStores.Any(store => store.SchemaName == "csr-switch-on" || store.SchemaName == "csr-switch-off")
+                ? CsrSwitchStackLookup.Load(storesInfo, cancellationToken) : null;
+
             // Process each store
             for (int storeIdx = 0; storeIdx < processableStores.Count; storeIdx++)
             {
@@ -331,7 +334,7 @@ namespace InstrumentsProcessor.Parsing
                     if (cancellationToken.IsCancellationRequested) break;
 
                     Event e = TraceBundleEventFactory.CreateEvent(
-                        eventType, mappings, row, uniquing, pidNames, schema, internCache, symbols, processRefMap, threadRefMap, runNumber);
+                        eventType, mappings, row, uniquing, pidNames, schema, internCache, symbols, processRefMap, threadRefMap, runNumber, switchStacks);
 
                     dataProcessor.ProcessDataElement(e, context, cancellationToken);
 

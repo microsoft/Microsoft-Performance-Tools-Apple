@@ -101,12 +101,20 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             return new SymbolResolution(hasArchive ? SymbolStatus.ModuleOnly : SymbolStatus.MissingArchive, image, coordinate);
         }
 
+        public SymbolResolution ResolveFrame(ulong address, SymbolContext context, int frameIndex)
+        {
+            if (frameIndex == 0 || address == 0) return ResolveAddress(address, context);
+            var result = ResolveAddress(address - 1, context);
+            return result.Image != null && result.Coordinate < ulong.MaxValue
+                ? result with { Coordinate = result.Coordinate + 1 } : result;
+        }
+
         public DataModels.Frame[] ResolveBacktrace(ulong[] addresses, SymbolContext context = null)
         {
             if (addresses == null) return Array.Empty<DataModels.Frame>();
-            return addresses.Select(address =>
+            return addresses.Select((address, index) =>
             {
-                var result = ResolveAddress(address, context);
+                var result = ResolveFrame(address, context, index);
                 string raw = $"0x{address:x}";
                 string name = result.Status == SymbolStatus.Named ? result.Symbol.Name :
                     result.Image != null ? $"{result.Image.Name}+0x{result.Coordinate:x}" : raw;

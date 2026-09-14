@@ -21,5 +21,7 @@ namespace InstrumentsProcessor.Parsing.Events
         public long Cpu { get; set; }
         public ulong DeltaInstructions { get; set; }
         public ulong DeltaCycles { get; set; }
+        public Backtrace Stack { get; set; }
+        public Backtrace KernelStack { get; set; }
     }
 }

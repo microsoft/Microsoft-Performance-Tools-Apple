@@ -419,7 +419,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             SymbolCatalog symbols = null,
             Dictionary<int, (long pid, string name)> refMap = null,
             Dictionary<int, (long tid, long pid, string name)> threadRefMap = null,
-            int runNumber = 1)
+            int runNumber = 1,
+            CsrSwitchStackLookup switchStacks = null)
         {
             var evt = CreateEventInstance(eventType);
             evt.SchemaName = schema.SchemaName;
@@ -449,6 +450,16 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 {
                     mapping.Property.SetValue(evt, dataModelValue);
                 }
+            }
+
+            if (evt is CsrSwitchEvent contextSwitch && switchStacks?.Find(schema.SchemaName, row) is CsrStackReferences stacks)
+            {
+                var context = GetSymbolContext(row, schema, uniquing, runNumber, refMap, threadRefMap);
+                if (stacks.User >= 0)
+                    contextSwitch.Stack = internCache.GetOrCreateBacktrace(stacks.User, uniquing, symbols, context, "XRCoreProfileCallstackTypeID");
+                if (stacks.Kernel >= 0)
+                    contextSwitch.KernelStack = internCache.GetOrCreateBacktrace(stacks.Kernel, uniquing, symbols,
+                        context with { Kernel = true }, "XRCoreProfileCallstackTypeID");
             }
 
             return evt;

@@ -39,6 +39,9 @@ namespace InstrumentsProcessor.Parsing.Events
         [Column("Cycles (Fixed)", "uint64", Mnemonic = "cycles")]
         public UInt64 Cycles { get; set; }
 
+        public Backtrace Stack { get; set; }
+        public Backtrace KernelStack { get; set; }
+
         public bool IsSwitchOn => SchemaName == "csr-switch-on";
         public bool IsSwitchOff => SchemaName == "csr-switch-off";
     }

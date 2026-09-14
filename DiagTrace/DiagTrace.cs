@@ -89,9 +89,10 @@ class DiagTrace
                     context = TraceBundleEventFactory.ContextForBacktrace(decoded, context);
                     if (processFilter.HasValue && context.ProcessId != processFilter.Value) continue;
                     if (samples < 5) Console.WriteLine($"Stack ref={reference}, process={context.ProcessId}, time={context.Timestamp}, field={column.Mnemonic}, frames={decoded.Addresses.Length}");
-                    foreach (ulong address in decoded.Addresses)
+                    for (int frameIndex = 0; frameIndex < decoded.Addresses.Length; frameIndex++)
                     {
-                        var resolution = catalog.ResolveAddress(address, context);
+                        ulong address = decoded.Addresses[frameIndex];
+                        var resolution = catalog.ResolveFrame(address, context, frameIndex);
                         counts.TryGetValue(resolution.Status, out int count);
                         counts[resolution.Status] = count + 1;
                         frames++;

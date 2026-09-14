@@ -2,11 +2,14 @@
 // Licensed under the MIT License.
 
 using InstrumentsProcessor.Cookers;
+using InstrumentsProcessor.AccessProviders;
+using InstrumentsProcessor.Parsing;
 using InstrumentsProcessor.Parsing.DataModels;
 using InstrumentsProcessor.Parsing.Events;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
+using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -147,6 +150,16 @@ namespace InstrumentsProcessor.Tables
                 AggregationMode = AggregationMode.Sum
             });
 
+        private static readonly ColumnConfiguration stackColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("79599276-7d25-4674-8b44-6981f3cd6dcb"), "Switch-On Stack")
+            { ShortDescription = "User callstack recorded at the switch-on event; not a sample of the entire running interval." },
+            new UIHints { IsVisible = true, Width = 300 });
+
+        private static readonly ColumnConfiguration kernelStackColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("6518d62f-9c2b-4216-951a-a7e2fdc8b03a"), "Switch-On Kernel Stack")
+            { ShortDescription = "Kernel callstack recorded at the switch-on event, when present." },
+            new UIHints { IsVisible = true, Width = 300 });
+
         public static bool IsDataAvailable(IDataExtensionRetrieval requiredData)
         {
             var data = requiredData.QueryOutput<List<CsrSwitchEvent>>(
@@ -159,7 +172,7 @@ namespace InstrumentsProcessor.Tables
         /// Per CPU, each switch-on is paired with the next switch-off to compute
         /// Δ Instructions and Δ Cycles for the time the thread was running.
         /// </summary>
-        private static List<CsrSwitchInterval> BuildIntervals(List<CsrSwitchEvent> events)
+        internal static List<CsrSwitchInterval> BuildIntervals(List<CsrSwitchEvent> events)
         {
             var intervals = new List<CsrSwitchInterval>();
 
@@ -199,6 +212,8 @@ namespace InstrumentsProcessor.Tables
                             Cpu = cpu,
                             DeltaInstructions = offInstr - onInstr,
                             DeltaCycles = offCycles - onCycles,
+                            Stack = onEvt.Stack,
+                            KernelStack = onEvt.KernelStack,
                         });
                     }
 
@@ -234,6 +249,8 @@ namespace InstrumentsProcessor.Tables
                         Cpu = cpu,
                         DeltaInstructions = offInstr - onInstr,
                         DeltaCycles = offCycles - onCycles,
+                        Stack = onEvt.Stack,
+                        KernelStack = onEvt.KernelStack,
                     });
                 }
             }
@@ -267,6 +284,9 @@ namespace InstrumentsProcessor.Tables
             var cpuProjection = baseProjection.Compose(Projector.CpuProjector);
             var deltaInstructionsProjection = baseProjection.Compose(Projector.DeltaInstructionsProjector);
             var deltaCyclesProjection = baseProjection.Compose(Projector.DeltaCyclesProjector);
+            var stackProjection = baseProjection.Compose((CsrSwitchInterval interval) => interval.Stack);
+            var kernelStackProjection = baseProjection.Compose((CsrSwitchInterval interval) => interval.KernelStack);
+            var stackAccess = new StackAccessProvider();
 
             var viewportClippedSwitchOnTimeProjection =
                 Projection.ClipTimeToVisibleDomain.Create(switchOnTimeProjection);
@@ -292,6 +312,18 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(cpuUsageInViewportColumn, cpuUsageInViewportProjection);
             tableBuilderWithRowCount.AddColumn(percentCpuUsageColumn, percentCpuUsageProjection);
             tableBuilderWithRowCount.AddColumn(countColumn, Projection.Constant(1));
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn, stackProjection, stackAccess,
+                builder => builder.WithModes(new ColumnVariantProperties { Label = "Stack frames", ColumnName = "Switch-On Stack" },
+                    modes => modes.WithHierarchicalToggle(new ColumnVariantDescriptor(
+                        new Guid("ec61b68e-b324-4b2f-a8c8-9661db2f61de"),
+                        new ColumnVariantProperties { Label = "Invert", ColumnName = "Switch-On Stack (Inverted)" }),
+                        stackProjection, new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccess))));
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(kernelStackColumn, kernelStackProjection, stackAccess,
+                builder => builder.WithModes(new ColumnVariantProperties { Label = "Stack frames", ColumnName = "Switch-On Kernel Stack" },
+                    modes => modes.WithHierarchicalToggle(new ColumnVariantDescriptor(
+                        new Guid("7b1829c8-5b65-48d4-bd20-c72f1d3c4b12"),
+                        new ColumnVariantProperties { Label = "Invert", ColumnName = "Switch-On Kernel Stack (Inverted)" }),
+                        kernelStackProjection, new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccess))));
 
             // Utilization by Process, Thread
             var tableConfig = new TableConfiguration("Utilization by Process, Thread")
@@ -300,6 +332,7 @@ namespace InstrumentsProcessor.Tables
                 {
                     processNameColumn,
                     threadIdColumn,
+                    stackColumn,
                     TableConfiguration.PivotColumn,
                     countColumn,
                     cpuUsageInViewportColumn,
@@ -322,6 +355,7 @@ namespace InstrumentsProcessor.Tables
                 {
                     cpuColumn,
                     processNameColumn,
+                    stackColumn,
                     TableConfiguration.PivotColumn,
                     countColumn,
                     cpuUsageInViewportColumn,
@@ -345,6 +379,7 @@ namespace InstrumentsProcessor.Tables
                 {
                     processNameColumn,
                     threadIdColumn,
+                    stackColumn,
                     TableConfiguration.PivotColumn,
                     countColumn,
                     cpuUsageInViewportColumn,

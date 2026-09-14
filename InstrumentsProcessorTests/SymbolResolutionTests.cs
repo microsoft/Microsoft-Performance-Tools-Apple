@@ -11,6 +11,102 @@ namespace InstrumentsProcessorTests
     {
         private static readonly Guid ImageUuid = Guid.Parse("F071EFE4-299F-3089-ACC4-0025B8FFB52A");
 
+        [Theory]
+        [InlineData(4, false)]
+        [InlineData(4, true)]
+        [InlineData(5, false)]
+        [InlineData(5, true)]
+        [InlineData(8, false)]
+        [InlineData(8, true)]
+        public void CoreProfileAcceptsShortWrappersAndAbsentProcess(int length, bool absentProcess)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(Path.Combine(directory, "arrayUniquer"));
+            try
+            {
+                using (var writer = new BinaryWriter(File.Create(Path.Combine(directory, "arrayUniquer", "integeruniquer.data"))))
+                {
+                    writer.Write(new byte[32]);
+                    writer.Write(1U);
+                    writer.Write(0x18EDECC08UL);
+                    writer.Write((uint)length);
+                    writer.Write(0UL);
+                    writer.Write(0x18EDECC08UL);
+                    writer.Write(absentProcess ? (ulong)uint.MaxValue : 2UL);
+                    writer.Write(0UL);
+                    if (length >= 5) writer.Write(0x18EDECC08UL);
+                    if (length == 8)
+                    {
+                        writer.Write(4UL);
+                        writer.Write(11UL);
+                        writer.Write(1UL);
+                    }
+                    writer.Write(2U);
+                    writer.Write(42UL);
+                    writer.Write(0UL);
+                }
+                var decoded = new Uniquing(directory).DecodeBacktrace(1, "XRCoreProfileCallstackTypeID");
+                Assert.Equal(0x18EDECC08UL, Assert.Single(decoded.Addresses));
+                Assert.Equal(absentProcess ? (long?)null : 42L, decoded.ProcessId);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
+        public void UniquerIndexSkipsBlockPaddingWithoutShiftingReferences()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string arrayPath = Path.Combine(directory, "arrayUniquer");
+            Directory.CreateDirectory(arrayPath);
+            try
+            {
+                var data = new byte[128];
+                BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(32), 1);
+                BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(36), 0x18EDECC08);
+                BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(64), 4);
+                BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(84), 2);
+                BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(100), 2);
+                BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(104), 813);
+                File.WriteAllBytes(Path.Combine(arrayPath, "integeruniquer.data"), data);
+                var index = new byte[64];
+                BinaryPrimitives.WriteUInt32LittleEndian(index, 0x01234567);
+                BinaryPrimitives.WriteUInt32LittleEndian(index.AsSpan(28), 64);
+                BinaryPrimitives.WriteUInt64LittleEndian(index.AsSpan(40), 32);
+                BinaryPrimitives.WriteUInt64LittleEndian(index.AsSpan(48), 1UL << 32);
+                BinaryPrimitives.WriteUInt64LittleEndian(index.AsSpan(56), (1UL << 32) | 36);
+                File.WriteAllBytes(Path.Combine(arrayPath, "integeruniquer.index"), index);
+                var uniquer = new Uniquing(directory);
+                var decoded = uniquer.DecodeBacktrace(1, "XRCoreProfileCallstackTypeID");
+                Assert.Equal(0x18EDECC08UL, Assert.Single(decoded.Addresses));
+                Assert.Equal(813L, decoded.ProcessId);
+                Assert.Null(uniquer.GetArray(3));
+                BinaryPrimitives.WriteUInt64LittleEndian(index.AsSpan(48), 10UL << 32);
+                File.WriteAllBytes(Path.Combine(arrayPath, "integeruniquer.index"), index);
+                Assert.Throws<InvalidDataException>(() => new Uniquing(directory));
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
+        public void CallerReturnAddressAtFunctionEndKeepsOriginalAddress()
+        {
+            var map = new RuntimeImageMap();
+            var image = new ImageLoad(ImageUuid, "module", 0x100000c, 2, 0, (ulong)long.MaxValue,
+                new[] { new SymbolSegment("__TEXT", 0x100000, 0x4000) });
+            map.Add(1, Guid.NewGuid(), 42, false, new ImageScope(new[] { image }, null));
+            var catalog = new SymbolCatalog(map, new[] { SymbolArchive.Parse(BuildArchive()) });
+            var context = new SymbolContext(1, 42, 0);
+            Assert.Equal(SymbolStatus.ModuleOnly, catalog.ResolveFrame(0x101030, context, 0).Status);
+            var caller = catalog.ResolveFrame(0x101030, context, 1);
+            Assert.Equal("__dispatch_client_callout", caller.Symbol.Name);
+            Assert.Equal(0x1030UL, caller.Coordinate);
+            Assert.Equal("second", catalog.ResolveFrame(0x101040, context, 0).Symbol.Name);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveFrame(0, context, 1).Status);
+            var frames = catalog.ResolveBacktrace(new[] { 0x101010UL, 0x101030UL }, context);
+            Assert.Equal("__dispatch_client_callout", frames[1].Function.Name);
+            Assert.Equal("0x101030", frames[1].Function.Address);
+        }
+
         [Fact]
         public void ArchiveUsesCountedRecordsAndRetainsDoubleUnderscoreNames()
         {
@@ -247,8 +343,14 @@ namespace InstrumentsProcessorTests
             var decoded = uniquing.DecodeBacktrace(10, "XRCoreProfileCallstackTypeID");
             Assert.Equal(722, decoded.ProcessId);
             Assert.Equal(37, decoded.Addresses.Length);
+            Assert.Equal(29, uniquing.GetArray(9757).Length);
+            Assert.Equal(0x1AD6A5560UL, uniquing.GetArray(9757)[0]);
+            Assert.Equal(559, uniquing.DecodeBacktrace(20026, "XRCoreProfileCallstackTypeID").ProcessId);
+            Assert.Equal(813, uniquing.DecodeBacktrace(23144, "XRCoreProfileCallstackTypeID").ProcessId);
+            Assert.Single(uniquing.DecodeBacktrace(29, "XRCoreProfileCallstackTypeID").Addresses);
+            Assert.Equal(20, uniquing.DecodeBacktrace(8792, "XRCoreProfileCallstackTypeID").Addresses.Length);
             var context = new SymbolContext(1, 722, 4381683583);
-            var results = decoded.Addresses.Select(address => catalog.ResolveAddress(address, context)).ToArray();
+            var results = decoded.Addresses.Select((address, index) => catalog.ResolveFrame(address, context, index)).ToArray();
             Assert.Equal(33, results.Count(result => result.Status == SymbolStatus.Named));
             Assert.Equal(4, results.Count(result => result.Status == SymbolStatus.ModuleOnly));
             var dispatch = catalog.ResolveAddress(0x18EC504B0, context);

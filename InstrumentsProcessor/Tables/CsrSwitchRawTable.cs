@@ -2,10 +2,14 @@
 // Licensed under the MIT License.
 
 using InstrumentsProcessor.Cookers;
+using InstrumentsProcessor.AccessProviders;
+using InstrumentsProcessor.Parsing;
+using InstrumentsProcessor.Parsing.DataModels;
 using InstrumentsProcessor.Parsing.Events;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility;
 using Microsoft.Performance.SDK.Processing;
+using Microsoft.Performance.SDK.Processing.ColumnBuilding;
 using System;
 using System.Collections.Generic;
 using Timestamp = Microsoft.Performance.SDK.Timestamp;
@@ -112,6 +116,15 @@ namespace InstrumentsProcessor.Tables
                 AggregationMode = AggregationMode.Sum
             });
 
+        private static readonly ColumnConfiguration stackColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("ace8af48-b68b-4fbd-aade-8c9982ea4c01"), "Stack")
+            { ShortDescription = "User callstack recorded for this exact switch-on or switch-off event." },
+            new UIHints { IsVisible = true, Width = 300 });
+
+        private static readonly ColumnConfiguration kernelStackColumn = new ColumnConfiguration(
+            new ColumnMetadata(new Guid("8a1fbd9c-9214-4d88-af14-455ad57d45b7"), "Kernel Stack"),
+            new UIHints { IsVisible = true, Width = 300 });
+
         public static bool IsDataAvailable(IDataExtensionRetrieval requiredData)
         {
             var data = requiredData.QueryOutput<List<CsrSwitchEvent>>(
@@ -142,6 +155,9 @@ namespace InstrumentsProcessor.Tables
             var cpuProjection = baseProjection.Compose(Projector.CpuProjector);
             var instructionsProjection = baseProjection.Compose(Projector.InstructionsProjector);
             var cyclesProjection = baseProjection.Compose(Projector.CyclesProjector);
+            var stackProjection = baseProjection.Compose((CsrSwitchEvent evt) => evt.Stack);
+            var kernelStackProjection = baseProjection.Compose((CsrSwitchEvent evt) => evt.KernelStack);
+            var stackAccess = new StackAccessProvider();
 
             tableBuilderWithRowCount.AddColumn(timeColumn, timeProjection);
             tableBuilderWithRowCount.AddColumn(eventTypeColumn, eventTypeProjection);
@@ -153,6 +169,18 @@ namespace InstrumentsProcessor.Tables
             tableBuilderWithRowCount.AddColumn(instructionsColumn, instructionsProjection);
             tableBuilderWithRowCount.AddColumn(cyclesColumn, cyclesProjection);
             tableBuilderWithRowCount.AddColumn(countColumn, Projection.Constant(1));
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(stackColumn, stackProjection, stackAccess,
+                builder => builder.WithModes(new ColumnVariantProperties { Label = "Stack frames", ColumnName = "Stack" },
+                    modes => modes.WithHierarchicalToggle(new ColumnVariantDescriptor(
+                        new Guid("3dcd03fb-9817-4ca3-a847-2739f6aa70fa"),
+                        new ColumnVariantProperties { Label = "Invert", ColumnName = "Stack (Inverted)" }),
+                        stackProjection, new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccess))));
+            tableBuilderWithRowCount.AddHierarchicalColumnWithVariants(kernelStackColumn, kernelStackProjection, stackAccess,
+                builder => builder.WithModes(new ColumnVariantProperties { Label = "Stack frames", ColumnName = "Kernel Stack" },
+                    modes => modes.WithHierarchicalToggle(new ColumnVariantDescriptor(
+                        new Guid("fd3c278d-48d4-4615-baa1-e2b04c714a68"),
+                        new ColumnVariantProperties { Label = "Invert", ColumnName = "Kernel Stack (Inverted)" }),
+                        kernelStackProjection, new InvertedCollectionAccessProvider<StackAccessProvider, Backtrace, string>(stackAccess))));
 
             // By CPU
             var tableConfig = new TableConfiguration("By CPU")
@@ -163,6 +191,7 @@ namespace InstrumentsProcessor.Tables
                     eventTypeColumn,
                     processNameColumn,
                     threadIdColumn,
+                    stackColumn,
                     TableConfiguration.PivotColumn,
                     countColumn,
                     instructionsColumn,
@@ -184,6 +213,7 @@ namespace InstrumentsProcessor.Tables
                     processNameColumn,
                     threadIdColumn,
                     eventTypeColumn,
+                    stackColumn,
                     TableConfiguration.PivotColumn,
                     countColumn,
                     instructionsColumn,
