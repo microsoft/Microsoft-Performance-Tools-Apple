@@ -53,6 +53,39 @@ namespace InstrumentsProcessorTests
         }
 
         [Fact]
+        public void TaggedBacktraceExpandsOrderedFrameChunks()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(Path.Combine(directory, "arrayUniquer"));
+            try
+            {
+                using (var writer = new BinaryWriter(File.Create(Path.Combine(directory, "arrayUniquer", "integeruniquer.data"))))
+                {
+                    writer.Write(new byte[32]);
+                    foreach (var entry in new[] {
+                        new ulong[] { 3849, 0 },
+                        new ulong[] { 0x18c6009b1, 0x18c451b7c },
+                        new ulong[] { 0x18c44834c, 0x18c6a1360, 0x18c44834c },
+                        new ulong[] { 1, 2 },
+                        new ulong[] { 3, 0 },
+                        new ulong[] { 0xffffffff },
+                        new ulong[] { 5, 0 },
+                    })
+                    {
+                        writer.Write((uint)entry.Length);
+                        foreach (ulong value in entry) writer.Write(value);
+                    }
+                }
+                var uniquer = new Uniquing(directory);
+                var decoded = uniquer.DecodeBacktrace(4, "XRTaggedBacktraceTypeID");
+                Assert.Equal(new ulong[] { 0x18c6009b1, 0x18c451b7c, 0x18c44834c, 0x18c6a1360, 0x18c44834c }, decoded.Addresses);
+                Assert.Equal(3849L, decoded.ProcessId);
+                Assert.Empty(uniquer.DecodeBacktrace(6, "XRTaggedBacktraceTypeID").Addresses);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
         public void UniquerIndexSkipsBlockPaddingWithoutShiftingReferences()
         {
             string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());

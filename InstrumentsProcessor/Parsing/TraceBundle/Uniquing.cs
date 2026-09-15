@@ -304,8 +304,32 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 return new DecodedBacktrace(GetArray((int)entry[0]) ?? Array.Empty<ulong>(), pid);
             }
             if (engineeringType?.IndexOf("TaggedBacktrace", StringComparison.OrdinalIgnoreCase) >= 0 || engineeringType == "tagged-backtrace")
-                return new DecodedBacktrace(entry.Length == 2 && entry[0] <= int.MaxValue
-                    ? GetArray((int)entry[0]) ?? Array.Empty<ulong>() : Array.Empty<ulong>());
+            {
+                if (entry.Length != 2 || entry[0] > int.MaxValue)
+                    return new DecodedBacktrace(Array.Empty<ulong>());
+                var chunks = GetArray((int)entry[0]);
+                if (chunks == null || chunks.Length > 4096) return new DecodedBacktrace(Array.Empty<ulong>());
+                var addresses = new List<ulong>();
+                long? owner = null;
+                foreach (ulong chunk in chunks)
+                {
+                    uint frameRef = (uint)chunk;
+                    uint processRef = (uint)(chunk >> 32);
+                    if (frameRef > int.MaxValue) return new DecodedBacktrace(Array.Empty<ulong>());
+                    var frames = GetArray((int)frameRef);
+                    if (frames == null || addresses.Count + (long)frames.Length > 65536)
+                        return new DecodedBacktrace(Array.Empty<ulong>());
+                    var process = processRef <= int.MaxValue ? GetArray((int)processRef) : null;
+                    if (process != null && process.Length > 0)
+                    {
+                        long pid = (uint)process[0];
+                        if (owner.HasValue && owner != pid) return new DecodedBacktrace(Array.Empty<ulong>());
+                        owner = pid;
+                    }
+                    addresses.AddRange(frames);
+                }
+                return new DecodedBacktrace(addresses.ToArray(), owner);
+            }
             if (engineeringType == "backtrace" || engineeringType == "XRBacktraceTypeID")
                 return new DecodedBacktrace(entry);
             return new DecodedBacktrace(Array.Empty<ulong>());
