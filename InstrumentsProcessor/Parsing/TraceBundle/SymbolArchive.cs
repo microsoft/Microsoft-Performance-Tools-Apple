@@ -109,14 +109,14 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             for (int index = 0; index < symbolCount; index++)
             {
                 int offset = (int)symbolsOffset + index * 24;
-                string name = ReadName(Read32(offset + 16));
+                string name = ItaniumDemangler.TryDemangle(ReadName(Read32(offset + 16)));
                 uint displayNameIndex = Read32(offset + 12);
                 if (displayNameIndex != 0)
                 {
                     string displayName = ReadName(displayNameIndex);
                     if (displayName.Length != 0) name = displayName;
                 }
-                symbols.Add(new SymbolEntry(ItaniumDemangler.TryDemangle(name), Read32(offset), Read32(offset + 4)));
+                symbols.Add(new SymbolEntry(name, Read32(offset), Read32(offset + 4)));
             }
             return new SymbolArchive(uuid, Read32(0x44), Read32(0x48), segments, symbols);
         }

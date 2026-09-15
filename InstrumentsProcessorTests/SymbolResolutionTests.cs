@@ -288,7 +288,7 @@ namespace InstrumentsProcessorTests
         [InlineData("__CFRelease", "_CFRelease", "_CFRelease")]
         [InlineData("_linkage", null, "_linkage")]
         [InlineData("_linkage", "", "_linkage")]
-        [InlineData("__Z3fooi", null, "__Z3fooi")]
+        [InlineData("__Z3fooi", null, "foo(int)")]
         [InlineData("_$s6Module3fooyyF", null, "_$s6Module3fooyyF")]
         [InlineData("__Z3fooi", "foo(int)", "foo(int)")]
         public void ArchivePrefersStoredDisplayNameWithoutStrippingUnderscores(string linkage, string? display, string expected)

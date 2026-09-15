@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using InstrumentsProcessor.Parsing.TraceBundle;
@@ -12,9 +11,9 @@ class DiagTrace
 {
     static int Main(string[] args)
     {
-        if (args.Length == 0)
+        if (args.Length < 1 || args.Length > 2)
         {
-            Console.Error.WriteLine("usage: DiagTrace <trace-path> [symbol-path] [--run N] [--pid N] [--stack-ref N] [--limit N] [--kernel]");
+            Console.Error.WriteLine("usage: DiagTrace <trace-path> [symbol-path]");
             return 2;
         }
         try { return Run(args); }
@@ -28,28 +27,9 @@ class DiagTrace
     static int Run(string[] args)
     {
         string tracePath = Path.GetFullPath(args[0]);
-        int run = 1, limit = 500;
-        long? processFilter = null;
-        int? referenceFilter = null;
-        bool kernelOnly = false;
-        string symbolPath = null;
-        for (int index = 1; index < args.Length; index++)
-        {
-            string option = args[index];
-            if (option == "--kernel") { kernelOnly = true; continue; }
-            if (!option.StartsWith("--", StringComparison.Ordinal) && symbolPath == null) { symbolPath = option; continue; }
-            if (index + 1 >= args.Length) throw new ArgumentException($"Missing value for {option}.");
-            string value = args[++index];
-            switch (option)
-            {
-                case "--run": run = int.Parse(value, CultureInfo.InvariantCulture); break;
-                case "--limit": limit = int.Parse(value, CultureInfo.InvariantCulture); break;
-                case "--pid": processFilter = long.Parse(value, CultureInfo.InvariantCulture); break;
-                case "--stack-ref": referenceFilter = int.Parse(value, CultureInfo.InvariantCulture); break;
-                default: throw new ArgumentException($"Unknown option {option}.");
-            }
-        }
-        if (run < 1 || limit < 1) throw new ArgumentException("Run and limit must be positive.");
+        string symbolPath = args.Length == 2 ? args[1] : null;
+        const int run = 1;
+        const int sampleLimit = 500;
         string corespace = Path.Combine(tracePath, "corespace");
         string core = Path.Combine(corespace, $"run{run}", "core");
         var catalog = SymbolCatalog.Load(tracePath);
@@ -79,15 +59,14 @@ class DiagTrace
                 foreach (var column in columns)
                 {
                     bool kernel = column.Mnemonic == "cp-kernel-callstack";
-                    if (kernelOnly != kernel) continue;
+                    if (kernel) continue;
                     if (!row.TryGetValue(column.Mnemonic, out var raw)) continue;
                     uint reference = Convert.ToUInt32(raw);
-                    if (reference > int.MaxValue || (referenceFilter.HasValue && reference != referenceFilter.Value)) continue;
+                    if (reference > int.MaxValue) continue;
                     var decoded = uniquing.DecodeBacktrace((int)reference, column.EngineeringType);
                     if (decoded.Addresses.Length == 0) continue;
                     var context = TraceBundleEventFactory.GetSymbolContext(row, schema, uniquing, run, processRefs, threadRefs) with { Kernel = kernel };
                     context = TraceBundleEventFactory.ContextForBacktrace(decoded, context);
-                    if (processFilter.HasValue && context.ProcessId != processFilter.Value) continue;
                     if (samples < 5) Console.WriteLine($"Stack ref={reference}, process={context.ProcessId}, time={context.Timestamp}, field={column.Mnemonic}, frames={decoded.Addresses.Length}");
                     for (int frameIndex = 0; frameIndex < decoded.Addresses.Length; frameIndex++)
                     {
@@ -104,13 +83,13 @@ class DiagTrace
                         }
                     }
                     samples++;
-                    if (samples >= limit) goto Complete;
+                    if (samples >= sampleLimit) goto Complete;
                 }
             }
         }
     Complete:
         Console.WriteLine($"Samples: {samples}; frames: {frames}");
         foreach (var count in counts.OrderBy(pair => pair.Key)) Console.WriteLine($"{count.Key}: {count.Value}");
-        return samples == 0 && referenceFilter.HasValue ? 1 : 0;
+        return 0;
     }
 }

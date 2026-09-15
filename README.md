@@ -29,37 +29,19 @@ If it is necessary to load additional symbols, please refer to this section.
 
 ![symbol_load](https://github.com/user-attachments/assets/99e33ce1-c0ca-4ce0-9811-74b31da2b091)
 
--   Instruments can save symbol information with the trace. The direct `.trace` loader can resolve these bundled symbols on Windows; missing names still require matching external symbols.
+-   Instruments can save symbol information with the trace. The direct `.trace` loader resolves bundled symbols on Windows and demangles C++ linkage names when no display name is stored. Missing names can be supplied through matching external symbols.
 
 ### Direct Trace Symbol Resolution
 
 Open a `.trace` directory (or its `open.creq` marker) or a ZIP bundle named `.trace` with the direct loader. XML import remains supported and unchanged.
 
-The loader reads runtime image mappings from the compressed `form.template` and version-7 `.symbolsarchive` files from `symbols/stores`. It resolves addresses using the recorded run, process, user/kernel address space, image UUID, architecture, and load lifetime. Shared-cache images use the cache UUID and recorded cache load address. No Mac-side XML export is required for this path.
+The loader uses the trace's recorded image mappings and bundled symbol archives. Matching external dSYMs, Mach-O files, and symbol stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin.
 
-Image signature start/end fields are treated as Mach load timestamps, with `start <= sample < end`; `0` and `Int64.MaxValue` are treated as unbounded. This interpretation and kernel symbol coordinates are working assumptions: user-space resolution has been checked against recorded stacks, while kernel resolution and unload/reload behavior have synthetic tests but still need real reference captures. Unsupported supplemental history or ambiguous ownership stays unresolved instead of using a guessed slide.
-
-The stack keeps its original runtime addresses. If an address has no recorded mapping, ARM64e user pointers can be retried without their authentication bits, but only against a matching ARM64e image in the same process and lifetime. Exact mappings take precedence; Intel, non-ARM64e images, and kernel address spaces are not normalized this way.
-
-Lookup covers recorded code and data segments, excluding the unmapped `__PAGEZERO` reservation. Caller instruction addresses are looked up using the preceding byte so a function-end boundary does not select the next function. Leaf addresses and addresses in data segments are used unchanged. Naming a data object does not imply that it is a valid instruction address. Stored display names take precedence over linkage names when present. Otherwise the stored name is preserved verbatim, including mangled C++/Swift names; the demangling hook is deliberately a no-op.
-
-Missing or placeholder names display the module and offset when ownership is known. A missing symbol archive does not mean the module was absent. Missing process mappings remain unresolved even if an image's symbols are available elsewhere in the bundle. Supported callstack types include `XRBacktraceTypeID`, tagged backtraces, and the observed 4-, 5-, and 8-element `XRCoreProfileCallstackTypeID` wrappers. Array references are resolved through the stored block index, excluding allocation padding. A tagged stack's explicitly unavailable final chunk preserves the valid preceding frames; invalid references, internal gaps, and conflicting owners are still rejected.
-
-`NA` can denote an absent stack or the end of a hierarchy. `Unknown!0x...` means no unambiguous image mapping was available, including recorded zero-address unwind gaps. `module+0x...` means ownership is known but no usable symbol name was found. These displays do not distinguish missing capture data from an unsupported encoding; use the diagnostic and parser warnings when investigating them.
-
-Optional external dSYMs, Mach-O files, and `manifest.json`/`symbols.nm` stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin. Recorded mappings take precedence over external `load_addr`; external symbols must match the image UUID and architecture. Valid bundled names take precedence, and external names can fill missing or placeholder entries. Archives with incompatible layouts or corrupt bounds produce warnings rather than guessed names.
-
-To inspect one recorded stack using the production resolver:
+To diagnose symbol resolution:
 
 ```powershell
-dotnet run --project DiagTrace/DiagTrace.csproj -c Release -- <trace-path> --run 1 --pid 722 --stack-ref 10 --limit 1
+dotnet run --project DiagTrace/DiagTrace.csproj -c Release -- <trace-path> [symbol-path]
 ```
-
-Omit `--pid` and `--stack-ref` to sample available stacks; add `--kernel` to inspect kernel stacks. The diagnostic reports named, module-only, missing-map/archive, and ambiguous results separately. It does not infer missing CPU samples or construct new event tables.
-
-For the optional real-trace regression test, set `INSTRUMENTS_TEST_TRACE` to the `20260707_155842_snap001_TabSwitchPaint_NFL1.trace` fixture and run `dotnet test InstrumentsProcessorTests/InstrumentsProcessorTests.csproj -c Release --filter FullyQualifiedName~SymbolResolutionTests`. Without that local fixture, the real-trace test is explicitly skipped; all synthetic tests still run.
-
-XML exports can help diagnose differences, but are not a source of truth for direct symbol resolution. Regression tests use independently constructed archive, mapping, and stack fixtures. XML import tests cover the separate XML reader; they do not require the direct loader to reproduce XML symbol names or cross-process frame attribution.
 
 ### [xctrace](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 
@@ -75,9 +57,7 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ## Capture Trace on MacOs:
 - Use Instruments or xctrace to capture the trace. Note that we support some of tables as shown above.
-- Download the [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh) to convert the captured trace into a compatible format for use with our plugin.
-- Open a Terminal and go to your Download folder and run `chmode +x trace-export.sh`
-- Run `./trace-export.sh --input <tracefile.trace>`
+- Copy the `.trace` bundle to Windows and open its `open.creq` marker in WPA. XML import remains available through the optional [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh).
 
 ![485px-Terminal-exporter](https://github.com/user-attachments/assets/e2119700-68f8-44cf-9e4d-dc8dfb612dee)
 
@@ -89,7 +69,7 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 ![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
 - Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.1.ptix"
 
-- Copy captured and exported trace <tracefile.xml> from you Mac device to your Windows machine and open it with the WPA.
+- Copy the captured `.trace` bundle or exported XML from your Mac to Windows and open it with WPA.
 
 ![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
 
