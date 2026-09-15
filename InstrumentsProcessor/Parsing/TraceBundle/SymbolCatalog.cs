@@ -12,10 +12,11 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
     internal enum SymbolStatus { Named, ModuleOnly, MissingMapping, MissingArchive, UnsupportedCoordinates, Ambiguous }
 
     internal sealed record SymbolResolution(SymbolStatus Status, ImageLoad Image = null,
-        ulong Coordinate = 0, SymbolEntry Symbol = null, string Source = null);
+        ulong Coordinate = 0, SymbolEntry Symbol = null, string Source = null, SymbolSegment Segment = null);
 
     internal sealed class SymbolCatalog
     {
+        private const ulong DarwinArm64eUserAddressMask = 0x00007fffffffffff;
         private readonly Dictionary<(Guid Uuid, uint Cpu, uint Subtype), SymbolArchive> archives = new();
         private readonly Dictionary<(Guid Uuid, uint Cpu, uint Subtype), List<SymbolArchive>> external = new();
         private readonly List<string> diagnostics = new();
@@ -68,6 +69,21 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             var scope = Mappings.GetScope(context);
             if (scope == null) return new SymbolResolution(SymbolStatus.MissingMapping);
             var mapping = scope.Find(address, context.Timestamp);
+            if (mapping.Image == null && !mapping.Ambiguous && !context.Kernel)
+            {
+                ulong canonicalAddress = address & DarwinArm64eUserAddressMask;
+                if (canonicalAddress != address && canonicalAddress != 0)
+                {
+                    var canonicalMapping = scope.Find(canonicalAddress, context.Timestamp);
+                    if (canonicalMapping.Ambiguous) return new SymbolResolution(SymbolStatus.Ambiguous);
+                    if (canonicalMapping.Image?.CpuType == 0x100000c &&
+                        (canonicalMapping.Image.CpuSubtype & 0x00ffffff) == 2)
+                    {
+                        address = canonicalAddress;
+                        mapping = canonicalMapping;
+                    }
+                }
+            }
             if (mapping.Ambiguous) return new SymbolResolution(SymbolStatus.Ambiguous);
             if (mapping.Image == null) return new SymbolResolution(SymbolStatus.MissingMapping);
             var image = mapping.Image;
@@ -78,13 +94,13 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             {
                 var segments = archive.Segments.Where(segment => segment.Name == mapping.Segment.Name).ToArray();
                 if (segments.Length != 1 || coordinate >= segments[0].Size || coordinate > ulong.MaxValue - segments[0].Address)
-                    return new SymbolResolution(SymbolStatus.UnsupportedCoordinates, image, coordinate);
+                    return new SymbolResolution(SymbolStatus.UnsupportedCoordinates, image, coordinate, Segment: mapping.Segment);
                 coordinate += segments[0].Address;
                 var symbol = archive.Find(coordinate, out bool ambiguous);
-                if (ambiguous) return new SymbolResolution(SymbolStatus.Ambiguous, image, coordinate);
-                if (symbol != null && !symbol.IsPlaceholder) return new SymbolResolution(SymbolStatus.Named, image, coordinate, symbol, "bundle");
+                if (ambiguous) return new SymbolResolution(SymbolStatus.Ambiguous, image, coordinate, Segment: mapping.Segment);
+                if (symbol != null && !symbol.IsPlaceholder) return new SymbolResolution(SymbolStatus.Named, image, coordinate, symbol, "bundle", mapping.Segment);
             }
-            if (external.TryGetValue(key, out var sources))
+            if (mapping.Segment.IsExecutable && external.TryGetValue(key, out var sources))
             {
                 var text = image.Segments.Where(segment => segment.Name == "__TEXT").ToArray();
                 if (text.Length == 1 && address >= text[0].Address)
@@ -94,17 +110,20 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                     {
                         var symbol = source.Find(offset, out bool ambiguous);
                         if (ambiguous) continue;
-                        if (symbol != null && !symbol.IsPlaceholder) return new SymbolResolution(SymbolStatus.Named, image, offset, symbol, "external");
+                        if (symbol != null && !symbol.IsPlaceholder) return new SymbolResolution(SymbolStatus.Named, image, offset, symbol, "external", mapping.Segment);
                     }
                 }
             }
-            return new SymbolResolution(hasArchive ? SymbolStatus.ModuleOnly : SymbolStatus.MissingArchive, image, coordinate);
+            return new SymbolResolution(hasArchive ? SymbolStatus.ModuleOnly : SymbolStatus.MissingArchive, image, coordinate, Segment: mapping.Segment);
         }
 
         public SymbolResolution ResolveFrame(ulong address, SymbolContext context, int frameIndex)
         {
-            if (frameIndex == 0 || address == 0) return ResolveAddress(address, context);
+            var exact = ResolveAddress(address, context);
+            if (frameIndex == 0 || address == 0 || exact.Status == SymbolStatus.Ambiguous ||
+                exact.Segment?.IsExecutable == false) return exact;
             var result = ResolveAddress(address - 1, context);
+            if (result.Segment?.IsExecutable == false) return exact;
             return result.Image != null && result.Coordinate < ulong.MaxValue
                 ? result with { Coordinate = result.Coordinate + 1 } : result;
         }

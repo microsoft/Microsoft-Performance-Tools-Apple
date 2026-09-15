@@ -74,7 +74,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             Clock = clock;
             boundaries = Images.SelectMany(image => new[] { image.Start, image.End })
                 .Where(time => time != 0 && time != long.MaxValue).Distinct().OrderBy(time => time).ToArray();
-            ranges = Images.SelectMany(image => image.Segments.Where(segment => segment.IsExecutable && segment.Size != 0)
+            ranges = Images.SelectMany(image => image.Segments.Where(segment => segment.Name != "__PAGEZERO" && segment.Size != 0)
                 .Select(segment => (Image: image, Segment: segment))).OrderBy(range => range.Segment.Address).ToArray();
             prefixEnds = new ulong[ranges.Length];
             ulong end = 0;

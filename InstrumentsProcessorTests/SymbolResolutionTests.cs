@@ -70,6 +70,17 @@ namespace InstrumentsProcessorTests
                         new ulong[] { 3, 0 },
                         new ulong[] { 0xffffffff },
                         new ulong[] { 5, 0 },
+                        new ulong[] { 1, 0xffffffff },
+                        new ulong[] { 7, 0 },
+                        new ulong[] { 1, 0xffffffff, 2 },
+                        new ulong[] { 9, 0 },
+                        new ulong[] { 1, 0x7fffffff },
+                        new ulong[] { 11, 0 },
+                        new ulong[] { 3850, 0 },
+                        new ulong[] { 1, (13UL << 32) | uint.MaxValue },
+                        new ulong[] { 14, 0 },
+                        new ulong[] { 1, ulong.MaxValue },
+                        new ulong[] { 16, 0 },
                     })
                     {
                         writer.Write((uint)entry.Length);
@@ -81,6 +92,14 @@ namespace InstrumentsProcessorTests
                 Assert.Equal(new ulong[] { 0x18c6009b1, 0x18c451b7c, 0x18c44834c, 0x18c6a1360, 0x18c44834c }, decoded.Addresses);
                 Assert.Equal(3849L, decoded.ProcessId);
                 Assert.Empty(uniquer.DecodeBacktrace(6, "XRTaggedBacktraceTypeID").Addresses);
+                foreach (int reference in new[] { 8, 17 })
+                {
+                    var partial = uniquer.DecodeBacktrace(reference, "XRTaggedBacktraceTypeID");
+                    Assert.Equal(new ulong[] { 0x18c6009b1, 0x18c451b7c }, partial.Addresses);
+                    Assert.Equal(3849L, partial.ProcessId);
+                }
+                foreach (int reference in new[] { 10, 12, 15 })
+                    Assert.Empty(uniquer.DecodeBacktrace(reference, "XRTaggedBacktraceTypeID").Addresses);
             }
             finally { Directory.Delete(directory, true); }
         }
@@ -151,6 +170,102 @@ namespace InstrumentsProcessorTests
             Assert.Null(archive.Find(0x1030, out _));
         }
 
+        [Theory]
+        [InlineData(0x100000cU, 2U, false, true)]
+        [InlineData(0x100000cU, 0x80000002U, false, true)]
+        [InlineData(0x100000cU, 0U, false, false)]
+        [InlineData(0x1000007U, 3U, false, false)]
+        [InlineData(0x100000cU, 2U, true, false)]
+        public void AuthenticatedLookupRequiresArm64eUserMapping(uint cpu, uint subtype, bool kernel, bool supported)
+        {
+            const ulong canonical = 0x190395cec;
+            const ulong authenticated = 0xd345800190395cec;
+            var image = new ImageLoad(ImageUuid, "module", cpu, subtype, 10, 20,
+                new[] { new SymbolSegment("__TEXT", 0x190395000, 0x1000) });
+            var archive = new SymbolArchive(ImageUuid, cpu, subtype,
+                new[] { new SymbolSegment("__TEXT", 0, 0x1000) }, new[] { new SymbolEntry("stored_name", 0xc00, 0xec) });
+            var map = new RuntimeImageMap();
+            map.Add(1, Guid.NewGuid(), 42, kernel, new ImageScope(new[] { image }, new TraceClock(0, 1, 1, 0, 0)));
+            var catalog = new SymbolCatalog(map, new[] { archive });
+            var context = new SymbolContext(1, 42, 10, kernel);
+            Assert.Equal(SymbolStatus.Named, catalog.ResolveFrame(canonical, context, 1).Status);
+            var result = catalog.ResolveFrame(authenticated, context, 1);
+            Assert.Equal(supported ? SymbolStatus.Named : SymbolStatus.MissingMapping, result.Status);
+            if (supported)
+            {
+                Assert.Equal("stored_name", result.Symbol.Name);
+                Assert.Equal(0xcecUL, result.Coordinate);
+                Assert.Equal(SymbolStatus.ModuleOnly, catalog.ResolveFrame(authenticated, context, 0).Status);
+                var frames = catalog.ResolveBacktrace(new[] { authenticated - 1, authenticated }, context);
+                Assert.All(frames, frame => Assert.Equal("stored_name", frame.Function.Name));
+                Assert.Equal("0xd345800190395cec", frames[1].Function.Address);
+            }
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveFrame(authenticated, context with { Timestamp = 20 }, 1).Status);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveFrame(authenticated, context with { ProcessId = 43 }, 1).Status);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveAddress(0xffff800000000000, context).Status);
+        }
+
+        [Fact]
+        public void AuthenticatedLookupDoesNotOverrideExactOrAmbiguousMappings()
+        {
+            const ulong authenticated = 0xd345800190395cec;
+            var lowImage = new ImageLoad(ImageUuid, "low", 0x100000c, 2, 0, (ulong)long.MaxValue,
+                new[] { new SymbolSegment("__TEXT", 0x190395000, 0x1000) });
+            var exactImage = new ImageLoad(Guid.NewGuid(), "exact", 0x1000007, 3, 0, (ulong)long.MaxValue,
+                new[] { new SymbolSegment("__TEXT", 0xd345800190395000, 0x1000) });
+            SymbolCatalog Catalog(params ImageLoad[] images)
+            {
+                var map = new RuntimeImageMap();
+                map.Add(1, Guid.NewGuid(), 42, false, new ImageScope(images, null));
+                return new SymbolCatalog(map);
+            }
+            var context = new SymbolContext(1, 42, 0);
+            Assert.Same(exactImage, Catalog(lowImage, exactImage).ResolveAddress(authenticated, context).Image);
+            var overlap = new ImageLoad(Guid.NewGuid(), "overlap", 0x100000c, 2, 0, (ulong)long.MaxValue, lowImage.Segments);
+            Assert.Equal(SymbolStatus.Ambiguous, Catalog(lowImage, overlap).ResolveAddress(authenticated, context).Status);
+            var highOverlap = new ImageLoad(Guid.NewGuid(), "high_overlap", 0x1000007, 3, 0, (ulong)long.MaxValue, exactImage.Segments);
+            Assert.Equal(SymbolStatus.Ambiguous, Catalog(lowImage, exactImage, highOverlap).ResolveAddress(authenticated, context).Status);
+        }
+
+        [Theory]
+        [InlineData("__DATA")]
+        [InlineData("__DATA_CONST")]
+        [InlineData("__AUTH_CONST")]
+        public void DataSymbolsUseRecordedSegmentCoordinatesWithoutReturnAddressAdjustment(string segmentName)
+        {
+            var segments = new[] { new SymbolSegment("__PAGEZERO", 0, 0x100000),
+                new SymbolSegment("__TEXT", 0x100000, 0x1000), new SymbolSegment(segmentName, 0x200000, 0x1000) };
+            var image = new ImageLoad(ImageUuid, "module", 0x100000c, 2, 10, 20, segments);
+            var scope = new ImageScope(new[] { image }, new TraceClock(0, 1, 1, 0, 0));
+            var map = new RuntimeImageMap();
+            map.Add(1, Guid.NewGuid(), 42, false, scope);
+            var archive = new SymbolArchive(ImageUuid, 0x100000c, 2,
+                new[] { new SymbolSegment("__TEXT", 0, 0x1000), new SymbolSegment(segmentName, 0x4000, 0x1000) },
+                new[] { new SymbolEntry("previous_data", 0x4000, 0x20), new SymbolEntry("data_object", 0x4020, 0x10) });
+            var catalog = new SymbolCatalog(map, new[] { archive });
+            var context = new SymbolContext(1, 42, 10);
+            foreach (int frameIndex in new[] { 0, 1 })
+            {
+                var result = catalog.ResolveFrame(0x200020, context, frameIndex);
+                Assert.Equal(SymbolStatus.Named, result.Status);
+                Assert.Equal("data_object", result.Symbol.Name);
+                Assert.Equal(0x4020UL, result.Coordinate);
+                Assert.False(result.Segment.IsExecutable);
+                Assert.Equal(SymbolStatus.ModuleOnly, catalog.ResolveFrame(0x200030, context, frameIndex).Status);
+                Assert.Equal("previous_data", catalog.ResolveFrame(0x200000, context, frameIndex).Symbol.Name);
+            }
+            Assert.Equal(SymbolStatus.ModuleOnly, catalog.ResolveAddress(0x200080, context).Status);
+            Assert.Equal(SymbolStatus.MissingArchive, new SymbolCatalog(map).ResolveAddress(0x200020, context).Status);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveAddress(0x20, context).Status);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveAddress(0x200020, context with { Timestamp = 20 }).Status);
+            Assert.Equal(SymbolStatus.MissingMapping, catalog.ResolveAddress(0x200020, context with { ProcessId = 43 }).Status);
+            var overlap = new ImageLoad(Guid.NewGuid(), "other", 0x100000c, 2, 10, 20, segments);
+            Assert.True(new ImageScope(new[] { image, overlap }, scope.Clock).Find(0x200020, 10).Ambiguous);
+            var frames = catalog.ResolveBacktrace(new[] { 0x200000UL, 0x200020UL }, context);
+            Assert.Equal("data_object", frames[1].Function.Name);
+            Assert.Equal("0x200020", frames[1].Function.Address);
+        }
+
         [Fact]
         public void ArchiveRejectsCorruptBoundsAndMismatchedUuid()
         {
@@ -161,7 +276,25 @@ namespace InstrumentsProcessorTests
             bytes = BuildArchive();
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0x80 + 16), uint.MaxValue);
             Assert.Throws<InvalidDataException>(() => SymbolArchive.Parse(bytes));
+            bytes = BuildArchive();
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0x80 + 12), uint.MaxValue);
+            Assert.Throws<InvalidDataException>(() => SymbolArchive.Parse(bytes));
             Assert.Throws<InvalidDataException>(() => SymbolArchive.Parse(new byte[10]));
+        }
+
+        [Theory]
+        [InlineData("_madvise", "madvise", "madvise")]
+        [InlineData("___CFDataDeallocate", "__CFDataDeallocate", "__CFDataDeallocate")]
+        [InlineData("__CFRelease", "_CFRelease", "_CFRelease")]
+        [InlineData("_linkage", null, "_linkage")]
+        [InlineData("_linkage", "", "_linkage")]
+        [InlineData("__Z3fooi", null, "__Z3fooi")]
+        [InlineData("_$s6Module3fooyyF", null, "_$s6Module3fooyyF")]
+        [InlineData("__Z3fooi", "foo(int)", "foo(int)")]
+        public void ArchivePrefersStoredDisplayNameWithoutStrippingUnderscores(string linkage, string? display, string expected)
+        {
+            var archive = SymbolArchive.Parse(BuildArchive(linkage, display));
+            Assert.Equal(expected, archive.Find(0x1010, out _)?.Name);
         }
 
         [Fact]
@@ -389,7 +522,7 @@ namespace InstrumentsProcessorTests
             var dispatch = catalog.ResolveAddress(0x18EC504B0, context);
             Assert.Equal(ImageUuid, dispatch.Image.Uuid);
             Assert.Equal(0x1B4B0UL, dispatch.Coordinate);
-            Assert.Equal("__dispatch_client_callout", dispatch.Symbol.Name);
+            Assert.Equal("_dispatch_client_callout", dispatch.Symbol.Name);
         }
 
         public sealed class LocalTraceFactAttribute : FactAttribute
@@ -497,9 +630,11 @@ namespace InstrumentsProcessorTests
             public void Dispose() => Directory.Delete(Path, true);
         }
 
-        internal static byte[] BuildArchive()
+        internal static byte[] BuildArchive(string linkageName = "__dispatch_client_callout", string? displayName = null)
         {
-            byte[] strings = Encoding.UTF8.GetBytes("MACH_HEADER\0__dispatch_client_callout\0second\0");
+            byte[] strings = Encoding.UTF8.GetBytes("MACH_HEADER\0" + linkageName + "\0second\0" +
+                (displayName == null ? "" : displayName + "\0"));
+            uint secondNameIndex = (uint)(12 + Encoding.UTF8.GetByteCount(linkageName) + 1);
             var bytes = new byte[0x80 + 48 + strings.Length];
             void Write32(int offset, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset), value);
             Write32(0, 7);
@@ -514,11 +649,12 @@ namespace InstrumentsProcessorTests
             Encoding.ASCII.GetBytes("__TEXT").CopyTo(bytes, 0x70);
             Write32(0x80, 0x1000);
             Write32(0x84, 0x30);
+            Write32(0x8c, displayName == null ? 0 : secondNameIndex + 7);
             Write32(0x90, 12);
             Write32(0x94, uint.MaxValue);
             Write32(0x98, 0x1040);
             Write32(0x9c, 0x20);
-            Write32(0xa8, 38);
+            Write32(0xa8, secondNameIndex);
             Write32(0xac, uint.MaxValue);
             strings.CopyTo(bytes, 0xb0);
             return bytes;

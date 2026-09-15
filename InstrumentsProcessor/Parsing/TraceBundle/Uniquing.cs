@@ -311,14 +311,11 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 if (chunks == null || chunks.Length > 4096) return new DecodedBacktrace(Array.Empty<ulong>());
                 var addresses = new List<ulong>();
                 long? owner = null;
-                foreach (ulong chunk in chunks)
+                for (int chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
                 {
+                    ulong chunk = chunks[chunkIndex];
                     uint frameRef = (uint)chunk;
                     uint processRef = (uint)(chunk >> 32);
-                    if (frameRef > int.MaxValue) return new DecodedBacktrace(Array.Empty<ulong>());
-                    var frames = GetArray((int)frameRef);
-                    if (frames == null || addresses.Count + (long)frames.Length > 65536)
-                        return new DecodedBacktrace(Array.Empty<ulong>());
                     var process = processRef <= int.MaxValue ? GetArray((int)processRef) : null;
                     if (process != null && process.Length > 0)
                     {
@@ -326,6 +323,15 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                         if (owner.HasValue && owner != pid) return new DecodedBacktrace(Array.Empty<ulong>());
                         owner = pid;
                     }
+                    if (frameRef == uint.MaxValue)
+                    {
+                        if (chunkIndex != chunks.Length - 1) return new DecodedBacktrace(Array.Empty<ulong>());
+                        break;
+                    }
+                    if (frameRef > int.MaxValue) return new DecodedBacktrace(Array.Empty<ulong>());
+                    var frames = GetArray((int)frameRef);
+                    if (frames == null || addresses.Count + (long)frames.Length > 65536)
+                        return new DecodedBacktrace(Array.Empty<ulong>());
                     addresses.AddRange(frames);
                 }
                 return new DecodedBacktrace(addresses.ToArray(), owner);

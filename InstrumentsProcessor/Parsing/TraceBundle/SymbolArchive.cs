@@ -98,15 +98,24 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 segments.Add(new SymbolSegment(Encoding.ASCII.GetString(bytes, offset + 16, 16).TrimEnd('\0'), address, size));
             }
             var symbols = new List<SymbolEntry>();
-            for (int index = 0; index < symbolCount; index++)
+            string ReadName(uint nameIndex)
             {
-                int offset = (int)symbolsOffset + index * 24;
-                uint nameIndex = Read32(offset + 16);
                 if (nameIndex >= stringSize) throw new InvalidDataException("Symbol name outside string table.");
                 int nameStart = (int)stringsOffset + (int)nameIndex;
                 int nameEnd = Array.IndexOf(bytes, (byte)0, nameStart);
                 if (nameEnd < 0) throw new InvalidDataException("Unterminated symbol name.");
-                string name = Encoding.UTF8.GetString(bytes, nameStart, nameEnd - nameStart);
+                return Encoding.UTF8.GetString(bytes, nameStart, nameEnd - nameStart);
+            }
+            for (int index = 0; index < symbolCount; index++)
+            {
+                int offset = (int)symbolsOffset + index * 24;
+                string name = ReadName(Read32(offset + 16));
+                uint displayNameIndex = Read32(offset + 12);
+                if (displayNameIndex != 0)
+                {
+                    string displayName = ReadName(displayNameIndex);
+                    if (displayName.Length != 0) name = displayName;
+                }
                 symbols.Add(new SymbolEntry(ItaniumDemangler.TryDemangle(name), Read32(offset), Read32(offset + 4)));
             }
             return new SymbolArchive(uuid, Read32(0x44), Read32(0x48), segments, symbols);

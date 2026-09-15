@@ -39,9 +39,13 @@ The loader reads runtime image mappings from the compressed `form.template` and 
 
 Image signature start/end fields are treated as Mach load timestamps, with `start <= sample < end`; `0` and `Int64.MaxValue` are treated as unbounded. This interpretation and kernel symbol coordinates are working assumptions: user-space resolution has been checked against recorded stacks, while kernel resolution and unload/reload behavior have synthetic tests but still need real reference captures. Unsupported supplemental history or ambiguous ownership stays unresolved instead of using a guessed slide.
 
-The stack keeps its original runtime addresses. Caller frames are looked up using the byte before the recorded return address so a function-end boundary does not select the next function; the leaf instruction address is used unchanged. Missing or placeholder names display the module and offset when ownership is known. A missing symbol archive does not mean the module was absent. Supported callstack types include `XRBacktraceTypeID`, tagged backtraces, and the observed 4-, 5-, and 8-element `XRCoreProfileCallstackTypeID` wrappers. Array references are resolved through the stored block index, excluding allocation padding.
+The stack keeps its original runtime addresses. If an address has no recorded mapping, ARM64e user pointers can be retried without their authentication bits, but only against a matching ARM64e image in the same process and lifetime. Exact mappings take precedence; Intel, non-ARM64e images, and kernel address spaces are not normalized this way.
 
-`NA` can denote an absent stack or the end of a hierarchy. `Unknown!0x...` means no unambiguous image mapping was available, including recorded zero-address unwind gaps. `module+0x...` means ownership is known but no usable function name was found. These displays do not distinguish missing capture data from an unsupported encoding; use the diagnostic and parser warnings when investigating them.
+Lookup covers recorded code and data segments, excluding the unmapped `__PAGEZERO` reservation. Caller instruction addresses are looked up using the preceding byte so a function-end boundary does not select the next function. Leaf addresses and addresses in data segments are used unchanged. Naming a data object does not imply that it is a valid instruction address. Stored display names take precedence over linkage names when present. Otherwise the stored name is preserved verbatim, including mangled C++/Swift names; the demangling hook is deliberately a no-op.
+
+Missing or placeholder names display the module and offset when ownership is known. A missing symbol archive does not mean the module was absent. Missing process mappings remain unresolved even if an image's symbols are available elsewhere in the bundle. Supported callstack types include `XRBacktraceTypeID`, tagged backtraces, and the observed 4-, 5-, and 8-element `XRCoreProfileCallstackTypeID` wrappers. Array references are resolved through the stored block index, excluding allocation padding. A tagged stack's explicitly unavailable final chunk preserves the valid preceding frames; invalid references, internal gaps, and conflicting owners are still rejected.
+
+`NA` can denote an absent stack or the end of a hierarchy. `Unknown!0x...` means no unambiguous image mapping was available, including recorded zero-address unwind gaps. `module+0x...` means ownership is known but no usable symbol name was found. These displays do not distinguish missing capture data from an unsupported encoding; use the diagnostic and parser warnings when investigating them.
 
 Optional external dSYMs, Mach-O files, and `manifest.json`/`symbols.nm` stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin. Recorded mappings take precedence over external `load_addr`; external symbols must match the image UUID and architecture. Valid bundled names take precedence, and external names can fill missing or placeholder entries. Archives with incompatible layouts or corrupt bounds produce warnings rather than guessed names.
 
@@ -55,26 +59,7 @@ Omit `--pid` and `--stack-ref` to sample available stacks; add `--kernel` to ins
 
 For the optional real-trace regression test, set `INSTRUMENTS_TEST_TRACE` to the `20260707_155842_snap001_TabSwitchPaint_NFL1.trace` fixture and run `dotnet test InstrumentsProcessorTests/InstrumentsProcessorTests.csproj -c Release --filter FullyQualifiedName~SymbolResolutionTests`. Without that local fixture, the real-trace test is explicitly skipped; all synthetic tests still run.
 
-### Trace/XML Differential Regression
-
-`TraceSymbolParityTests` compares a matching single-run `.trace` bundle and its original XML export. The full test covers every `time-profile`, `syscall`, and `virtual-memory` event, using the production direct source parser and the legacy XML reader/deserializer with independent contexts. It requires exactly one exported table per compared schema and nonempty frame coverage, so missing or unsupported data cannot silently pass. It streams the XML (including concatenated export roots) and preserves each table's `id`/`ref` scope; it retains decoded events and reference caches rather than loading the entire XML document.
-
-Run from the core branch/worktree, supplying absolute paths to the artifacts:
-
-```powershell
-$env:INSTRUMENTS_DIFF_TRACE = 'D:\Microsoft-Performance-Tools-Apple\BenWithStack.trace'
-$env:INSTRUMENTS_DIFF_XML = 'D:\Microsoft-Performance-Tools-Apple\BenWithStack.xml'
-$env:INSTRUMENTS_DIFF_REPORT = "$PWD\InstrumentsProcessorTests\TestResults\BenWithStack-parity.json"
-dotnet test InstrumentsProcessorTests/InstrumentsProcessorTests.csproj -c Release --filter FullyQualifiedName~TraceSymbolParityTests
-```
-
-Both artifact-dependent tests are explicitly skipped if neither path is configured. A partial or invalid configuration fails. The other comparator tests run in ordinary CI; the large capture/export files are not checked in. If the report path is omitted, the JSON is written under the test output's `TestResults` directory.
-
-Events are aligned by run/schema, timestamp, PID and TID, preserving duplicates; matching frame sequences and event payloads disambiguate same-key duplicates where possible. CPU display values, durations and operation/call details are compared separately so a malformed display value does not prevent the stack comparison. The test checks event multiplicity, ordered frame addresses and counts, module, UUID, architecture, runtime load base, and full function names. Additional XML metadata is only an expectation and is never supplied to the direct resolver to help it find an image. External symbol paths are temporarily disabled and restored; a plugin-relative `SymbolStore` in the test output is rejected. The test collection is nonparallel to isolate that process-wide environment setting.
-
-The JSON includes artifact hashes, completion status, per-schema coverage, full mismatch counts, and up to 20 examples per category with event identity, frame index, original names and addresses. Counts are differences, not necessarily distinct frames: one frame can have both image and name mismatches. Leading-underscore and demangling/name differences remain visible and fail strict parity; there is no broad name normalization or accepted mismatch baseline. Two unresolved names are counted separately from exact matches; newly resolved names also remain reported differences for review. Legacy decoded frames are cross-checked against the raw XML frame definitions so legacy parser errors are not silently treated as truth.
-
-The BenWithStack pair currently **fails full parity**. The first sample's nested tagged backtrace is now decoded as all 35 XML frames (with a compact CI regression), but the full comparison also exposes display-field mismatches, symbol spelling/demangling differences, pointer-authenticated addresses without matching image resolution, missing symbols, and some legacy/frame-coverage discrepancies. A red opt-in test is intentional until these differences are resolved or individually reviewed; a passing ordinary CI run with the artifacts unset is not a claim of full trace/XML parity.
+XML exports can help diagnose differences, but are not a source of truth for direct symbol resolution. Regression tests use independently constructed archive, mapping, and stack fixtures. XML import tests cover the separate XML reader; they do not require the direct loader to reproduce XML symbol names or cross-process frame attribution.
 
 ### [xctrace](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 
