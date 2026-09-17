@@ -16,6 +16,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
 
     internal sealed class SymbolCatalog
     {
+        private const uint CpuSubtypeMask = 0xFF000000;
         private readonly Dictionary<(Guid Uuid, uint Cpu, uint Subtype), SymbolArchive> archives = new();
         private readonly Dictionary<(Guid Uuid, uint Cpu, uint Subtype), List<SymbolArchive>> external = new();
         private readonly List<string> diagnostics = new();
@@ -86,16 +87,12 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             }
             if (external.TryGetValue(key, out var sources))
             {
-                var text = image.Segments.Where(segment => segment.Name == "__TEXT").ToArray();
-                if (text.Length == 1 && address >= text[0].Address)
+                foreach (var source in sources)
                 {
-                    ulong offset = address - text[0].Address;
-                    foreach (var source in sources)
-                    {
-                        var symbol = source.Find(offset, out bool ambiguous);
-                        if (ambiguous) continue;
-                        if (symbol != null && !symbol.IsPlaceholder) return new SymbolResolution(SymbolStatus.Named, image, offset, symbol, "external");
-                    }
+                    var symbol = FindExternalSymbol(source, mapping.Segment, address, out ulong sourceCoordinate, out bool ambiguous);
+                    if (ambiguous) continue;
+                    if (symbol != null && !symbol.IsPlaceholder)
+                        return new SymbolResolution(SymbolStatus.Named, image, sourceCoordinate, symbol, "external");
                 }
             }
             return new SymbolResolution(hasArchive ? SymbolStatus.ModuleOnly : SymbolStatus.MissingArchive, image, coordinate);
@@ -128,6 +125,23 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
         internal sealed record MergeResult(int DsymImagesSeen, int MatchedImages, int UnmatchedImages,
             int FunctionsAdded, IReadOnlyList<DsymMergeDetail> Details);
 
+        internal static bool CpuSubtypesMatch(uint recorded, uint source) =>
+            (recorded & ~CpuSubtypeMask) == (source & ~CpuSubtypeMask);
+
+        internal static SymbolEntry FindExternalSymbol(SymbolArchive source, SymbolSegment runtimeSegment,
+            ulong address, out ulong sourceCoordinate, out bool ambiguous)
+        {
+            sourceCoordinate = 0;
+            ambiguous = false;
+            if (address < runtimeSegment.Address) return null;
+            ulong offset = address - runtimeSegment.Address;
+            var segments = source.Segments.Where(segment => segment.Name == runtimeSegment.Name &&
+                offset < segment.Size && segment.Address <= ulong.MaxValue - offset).ToArray();
+            if (segments.Length != 1) return null;
+            sourceCoordinate = segments[0].Address + offset;
+            return source.Find(sourceCoordinate, out ambiguous);
+        }
+
         public MergeResult MergeDsyms(string path)
         {
             var details = new List<DsymMergeDetail>();
@@ -142,7 +156,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                     continue;
                 }
                 var architectures = candidates.Where(image => (!source.CpuType.HasValue || image.CpuType == source.CpuType) &&
-                    (!source.CpuSubtype.HasValue || image.CpuSubtype == source.CpuSubtype))
+                    (!source.CpuSubtype.HasValue || CpuSubtypesMatch(image.CpuSubtype, source.CpuSubtype.Value)))
                     .GroupBy(image => (image.CpuType, image.CpuSubtype)).ToArray();
                 if (architectures.Length != 1)
                 {
@@ -153,9 +167,11 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 var symbols = source.Functions.Where(symbol => symbol.Address >= source.TextVmAddr &&
                     symbol.Size <= ulong.MaxValue - (symbol.Address - source.TextVmAddr))
                     .Select(symbol => new SymbolEntry(ItaniumDemangler.TryDemangle(symbol.Name), symbol.Address - source.TextVmAddr, symbol.Size)).ToArray();
+                var segments = source.Segments.Where(segment => segment.Address >= source.TextVmAddr)
+                    .Select(segment => new SymbolSegment(segment.Name, segment.Address - source.TextVmAddr, segment.Size)).ToArray();
                 var key = (uuid, architecture.CpuType, architecture.CpuSubtype);
                 if (!external.TryGetValue(key, out var entries)) external[key] = entries = new List<SymbolArchive>();
-                entries.Add(new SymbolArchive(uuid, key.CpuType, key.CpuSubtype, Array.Empty<SymbolSegment>(), symbols));
+                entries.Add(new SymbolArchive(uuid, key.CpuType, key.CpuSubtype, segments, symbols));
                 matched++;
                 added += symbols.Length;
                 details.Add(new DsymMergeDetail(source.Uuid, source.ImageName, true, symbols.Length,

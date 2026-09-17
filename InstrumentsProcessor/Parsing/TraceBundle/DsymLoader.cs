@@ -5,6 +5,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace InstrumentsProcessor.Parsing.TraceBundle
@@ -31,11 +32,13 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
         public ulong? LoadAddr { get; }
         public uint? CpuType { get; }
         public uint? CpuSubtype { get; }
+        public IReadOnlyList<SymbolSegment> Segments { get; }
         public IReadOnlyList<DsymFunction> Functions { get; }
 
         public DsymImage(string uuid, string imageName, ulong textVmAddr, ulong textVmSize,
                  IReadOnlyList<DsymFunction> functions, ulong? loadAddr = null,
-                 uint? cpuType = null, uint? cpuSubtype = null)
+             uint? cpuType = null, uint? cpuSubtype = null,
+             IReadOnlyList<SymbolSegment> segments = null)
         {
             Uuid = uuid;
             ImageName = imageName;
@@ -45,6 +48,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             LoadAddr = loadAddr;
             CpuType = cpuType;
             CpuSubtype = cpuSubtype;
+            Segments = segments ?? new[] { new SymbolSegment("__TEXT", textVmAddr, textVmSize) };
         }
     }
 
@@ -276,6 +280,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             ulong textVmAddr = 0;
             ulong textVmSize = 0;
             uint symOff = 0, nsyms = 0, strOff = 0, strSize = 0;
+            var segments = new List<SymbolSegment>();
 
             int cmdPos = baseOff + headerSize;
             int cmdEnd = cmdPos + (int)sizeofcmds;
@@ -296,10 +301,14 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                     // segment_command_64: cmd(4) cmdsize(4) segname(16) vmaddr(8) vmsize(8)
                     //                     fileoff(8) filesize(8) maxprot(4) initprot(4) nsects(4) flags(4)
                     string segName = Encoding.ASCII.GetString(data, cmdPos + 8, 16).TrimEnd('\0');
+                    ulong vmAddr = ReadU64(data, cmdPos + 24, bigEndian);
+                    ulong vmSize = ReadU64(data, cmdPos + 32, bigEndian);
+                    if (vmSize > ulong.MaxValue - vmAddr) return null;
+                    segments.Add(new SymbolSegment(segName, vmAddr, vmSize));
                     if (segName == "__TEXT")
                     {
-                        textVmAddr = ReadU64(data, cmdPos + 24, bigEndian);
-                        textVmSize = ReadU64(data, cmdPos + 32, bigEndian);
+                        textVmAddr = vmAddr;
+                        textVmSize = vmSize;
                     }
                 }
                 else if (cmd == LC_SYMTAB && cmdSize >= 24)
@@ -320,23 +329,24 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             var functions = ParseSymbols(
                 data, baseOff, sliceSize, bigEndian,
                 symOff, nsyms, strOff, strSize,
-                textVmAddr, textVmSize);
+                segments);
 
             if (functions.Count == 0)
                 return null;
 
             return new DsymImage(uuid, imageName, textVmAddr, textVmSize, functions,
-                cpuType: ReadU32(data, baseOff + 4, bigEndian), cpuSubtype: ReadU32(data, baseOff + 8, bigEndian));
+                cpuType: ReadU32(data, baseOff + 4, bigEndian), cpuSubtype: ReadU32(data, baseOff + 8, bigEndian),
+                segments: segments);
         }
 
         /// <summary>
         /// Read the nlist_64 table + string table and produce sorted, sized function symbols
-        /// that fall within the image's __TEXT segment.
+        /// that fall within executable image segments.
         /// </summary>
         private static List<DsymFunction> ParseSymbols(
             byte[] data, int baseOff, uint sliceSize, bool bigEndian,
             uint symOff, uint nsyms, uint strOff, uint strSize,
-            ulong textVmAddr, ulong textVmSize)
+            IReadOnlyList<SymbolSegment> segments)
         {
             var results = new List<DsymFunction>();
 
@@ -348,10 +358,10 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
 
             int symBase = baseOff + (int)symOff;
             int strBase = baseOff + (int)strOff;
-            ulong textVmEnd = textVmAddr + textVmSize;
+            var executableSegments = segments.Where(segment => segment.IsExecutable && segment.Size != 0).ToArray();
 
             // Collect raw (addr, name) pairs first, then sort + compute sizes.
-            var raw = new List<(ulong Addr, string Name)>();
+            var raw = new List<(ulong Addr, string Name, ulong SegmentEnd)>();
 
             for (uint i = 0; i < nsyms; i++)
             {
@@ -373,7 +383,8 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                     if (nSect == 0) continue;
                 }
 
-                if (nValue < textVmAddr || nValue >= textVmEnd) continue;
+                var segment = executableSegments.FirstOrDefault(candidate => candidate.Contains(nValue));
+                if (segment == null) continue;
                 if (nStrx == 0 || nStrx >= strSize) continue;
 
                 int nameOff = strBase + (int)nStrx;
@@ -392,7 +403,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 string name = Encoding.UTF8.GetString(data, nameOff, nameEnd - nameOff);
                 if (name.Length == 0) continue;
 
-                raw.Add((nValue, name));
+                raw.Add((nValue, name, segment.Address + segment.Size));
             }
 
             if (raw.Count == 0) return results;
@@ -409,11 +420,15 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 if (i > 0 && raw[i - 1].Addr == addr) continue;
 
                 // Compute size = distance to next distinct-address symbol,
-                // clamped to __TEXT end and a sanity cap.
-                ulong nextAddr = textVmEnd;
+                // clamped to the owning segment and a sanity cap.
+                ulong nextAddr = raw[i].SegmentEnd;
                 for (int j = i + 1; j < raw.Count; j++)
                 {
-                    if (raw[j].Addr > addr) { nextAddr = raw[j].Addr; break; }
+                    if (raw[j].Addr > addr)
+                    {
+                        if (raw[j].Addr < nextAddr) nextAddr = raw[j].Addr;
+                        break;
+                    }
                 }
                 ulong size = nextAddr - addr;
                 if (size == 0) size = 4;

@@ -14,7 +14,7 @@ class DiagTrace
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: DiagTrace <trace-path> [symbol-path] [--run N] [--pid N] [--stack-ref N] [--limit N] [--kernel]");
+            Console.Error.WriteLine("usage: DiagTrace <trace-path> [symbol-path] [--run N] [--pid N] [--stack-ref N] [--schema NAME] [--limit N] [--kernel]");
             return 2;
         }
         try { return Run(args); }
@@ -31,6 +31,7 @@ class DiagTrace
         int run = 1, limit = 500;
         long? processFilter = null;
         int? referenceFilter = null;
+        string schemaFilter = null;
         bool kernelOnly = false;
         string symbolPath = null;
         for (int index = 1; index < args.Length; index++)
@@ -46,6 +47,7 @@ class DiagTrace
                 case "--limit": limit = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "--pid": processFilter = long.Parse(value, CultureInfo.InvariantCulture); break;
                 case "--stack-ref": referenceFilter = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "--schema": schemaFilter = value; break;
                 default: throw new ArgumentException($"Unknown option {option}.");
             }
         }
@@ -60,6 +62,8 @@ class DiagTrace
         {
             var merge = catalog.MergeDsyms(symbolPath);
             Console.WriteLine($"External images: {merge.MatchedImages}/{merge.DsymImagesSeen} matched; {merge.FunctionsAdded} symbols added");
+            foreach (var detail in merge.Details.Where(detail => detail.Matched))
+                Console.WriteLine($"  External match: {detail.ImageName} [{detail.Uuid}] runtime-text=0x{detail.RuntimeTextBase:X} dsym-text=0x{detail.DsymTextBase:X} functions={detail.FunctionsAdded}");
         }
         var uniquing = new Uniquing(Path.Combine(core, "uniquing"));
         var stores = TableManager.ParseTablesPlist(Path.Combine(core, "table-manager", "tables.plist"), corespace);
@@ -70,6 +74,7 @@ class DiagTrace
         foreach (string directory in Directory.EnumerateDirectories(Path.Combine(core, "stores")).OrderBy(path => path, StringComparer.Ordinal))
         {
             string schemaName = stores.FirstOrDefault(store => Path.GetFullPath(store.StorePath) == Path.GetFullPath(directory) && !string.IsNullOrEmpty(store.SchemaName))?.SchemaName ?? "raw";
+            if (schemaFilter != null && !string.Equals(schemaName, schemaFilter, StringComparison.OrdinalIgnoreCase)) continue;
             var schema = new StoreSchema(directory, schemaName);
             var columns = schema.Columns.Where(column =>
                 column.EngineeringType.IndexOf("Backtrace", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -88,7 +93,7 @@ class DiagTrace
                     var context = TraceBundleEventFactory.GetSymbolContext(row, schema, uniquing, run, processRefs, threadRefs) with { Kernel = kernel };
                     context = TraceBundleEventFactory.ContextForBacktrace(decoded, context);
                     if (processFilter.HasValue && context.ProcessId != processFilter.Value) continue;
-                    if (samples < 5) Console.WriteLine($"Stack ref={reference}, process={context.ProcessId}, time={context.Timestamp}, field={column.Mnemonic}, frames={decoded.Addresses.Length}");
+                    if (samples < 5) Console.WriteLine($"Stack ref={reference}, process={context.ProcessId}, time={context.Timestamp}, field={column.Mnemonic}, encoding={column.EngineeringType}, frames={decoded.Addresses.Length}");
                     for (int frameIndex = 0; frameIndex < decoded.Addresses.Length; frameIndex++)
                     {
                         ulong address = decoded.Addresses[frameIndex];
@@ -100,7 +105,7 @@ class DiagTrace
                         {
                             string name = resolution.Symbol?.Name ?? "<unresolved>";
                             ulong offset = resolution.Symbol != null ? resolution.Coordinate - resolution.Symbol.Address : 0;
-                            Console.WriteLine($"  0x{address:X} {resolution.Status} {resolution.Image?.Name} [{resolution.Image?.Uuid}] coordinate=0x{resolution.Coordinate:X} {name}+0x{offset:X}");
+                            Console.WriteLine($"  0x{address:X} {resolution.Status} {resolution.Image?.Name} [{resolution.Image?.Uuid}] coordinate=0x{resolution.Coordinate:X} {name}+0x{offset:X} source={resolution.Source ?? "none"}");
                         }
                     }
                     samples++;

@@ -304,8 +304,23 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
                 return new DecodedBacktrace(GetArray((int)entry[0]) ?? Array.Empty<ulong>(), pid);
             }
             if (engineeringType?.IndexOf("TaggedBacktrace", StringComparison.OrdinalIgnoreCase) >= 0 || engineeringType == "tagged-backtrace")
-                return new DecodedBacktrace(entry.Length == 2 && entry[0] <= int.MaxValue
-                    ? GetArray((int)entry[0]) ?? Array.Empty<ulong>() : Array.Empty<ulong>());
+            {
+                if (entry.Length != 2 || entry[0] > int.MaxValue)
+                    return new DecodedBacktrace(Array.Empty<ulong>());
+                var taggedFrames = GetArray((int)entry[0]);
+                if (taggedFrames == null) return new DecodedBacktrace(Array.Empty<ulong>());
+                var addresses = new List<ulong>();
+                foreach (ulong taggedFrame in taggedFrames)
+                {
+                    uint tag = (uint)(taggedFrame >> 32);
+                    uint reference = (uint)taggedFrame;
+                    if (tag == 0x608C && reference <= int.MaxValue)
+                        addresses.AddRange(GetArray((int)reference) ?? Array.Empty<ulong>());
+                    else
+                        addresses.Add(taggedFrame);
+                }
+                return new DecodedBacktrace(addresses.ToArray());
+            }
             if (engineeringType == "backtrace" || engineeringType == "XRBacktraceTypeID")
                 return new DecodedBacktrace(entry);
             return new DecodedBacktrace(Array.Empty<ulong>());

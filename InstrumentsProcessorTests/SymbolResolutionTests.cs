@@ -53,6 +53,34 @@ namespace InstrumentsProcessorTests
         }
 
         [Fact]
+        public void TaggedBacktraceExpandsReferencedFrameArrays()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(Path.Combine(directory, "arrayUniquer"));
+            try
+            {
+                using (var writer = new BinaryWriter(File.Create(Path.Combine(directory, "arrayUniquer", "integeruniquer.data"))))
+                {
+                    writer.Write(new byte[32]);
+                    foreach (ulong[] entry in new[] {
+                        new[] { 0x1000UL, 0x2000UL },
+                        new[] { 0x3000UL },
+                        new[] { 0x608C00000000UL, 0x608C00000001UL, 0x4000UL },
+                        new[] { 2UL, 0UL }
+                    })
+                    {
+                        writer.Write((uint)entry.Length);
+                        foreach (ulong value in entry) writer.Write(value);
+                    }
+                }
+
+                var decoded = new Uniquing(directory).DecodeBacktrace(3, "XRTaggedBacktraceTypeID");
+                Assert.Equal(new[] { 0x1000UL, 0x2000UL, 0x3000UL, 0x4000UL }, decoded.Addresses);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
         public void UniquerIndexSkipsBlockPaddingWithoutShiftingReferences()
         {
             string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -299,6 +327,35 @@ namespace InstrumentsProcessorTests
             Assert.Equal(1, catalog.MergeDsyms(store).MatchedImages);
             Assert.Equal("external_function", catalog.ResolveAddress(0x101010, context).Symbol.Name);
             Assert.Equal("module", catalog.ResolveAddress(0x101010, context).Image.Name);
+        }
+
+        [Theory]
+        [InlineData(2U, 0xC0000002U, true)]
+        [InlineData(0x80000002U, 0x40000002U, true)]
+        [InlineData(2U, 1U, false)]
+        public void CpuSubtypeMatchingIgnoresCapabilityBits(uint recorded, uint external, bool expected)
+        {
+            Assert.Equal(expected, SymbolCatalog.CpuSubtypesMatch(recorded, external));
+        }
+
+        [Fact]
+        public void ExternalKernelSymbolsUseCorrespondingExecutableSegmentCoordinates()
+        {
+            const ulong runtimeTextExec = 0xFFFFFE000B384000;
+            var source = new SymbolArchive(ImageUuid, 0x100000c, 2,
+                new[] { new SymbolSegment("__TEXT_EXEC", 0x124000, 0x900000) },
+                new[] { new SymbolEntry("_kperf_kdebug_handler", 0x2E75B4, 0x200) });
+
+            var symbol = SymbolCatalog.FindExternalSymbol(source,
+                new SymbolSegment("__TEXT_EXEC", runtimeTextExec, 0x900000),
+                0xFFFFFE000B5476DC, out ulong coordinate, out bool ambiguous);
+
+            Assert.False(ambiguous);
+            Assert.Equal(0x2E76DCUL, coordinate);
+            Assert.Equal("_kperf_kdebug_handler", symbol.Name);
+            Assert.Null(SymbolCatalog.FindExternalSymbol(source,
+                new SymbolSegment("__TEXT", 0xFFFFFE000700C000, 0x8000),
+                0xFFFFFE000700C010, out _, out _));
         }
 
         [Fact]
