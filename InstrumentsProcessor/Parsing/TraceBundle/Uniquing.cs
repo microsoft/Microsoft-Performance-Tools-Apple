@@ -10,6 +10,8 @@ using System.Linq;
 
 namespace InstrumentsProcessor.Parsing.TraceBundle
 {
+    internal sealed record DecodedBacktrace(ulong[] Addresses, long? ProcessId = null);
+
     /// <summary>
     /// Loads the uniquing data (strings and arrays) from a .trace bundle's
     /// corespace/run/core/uniquing directory. Used to resolve reference indices
@@ -24,7 +26,7 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
 
         public List<string> Strings { get; } = new List<string>();
 
-        // Sequential offset table built by scanning the data file.
+        // Reference offsets from the block-addressed index when present.
         // Entry i is at _arrayData[_entryOffsets[i]].
         private byte[] _arrayData;
         private int[] _entryOffsets;
@@ -75,9 +77,35 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             if (data.Length <= DataHeaderSize)
                 return;
 
-            // Scan the data file sequentially to build the entry offset table.
-            // Each entry is: [count_u32] [val0_lo_u32 val0_hi_u32] ... [valN_lo valN_hi]
             var offsetList = new List<int>();
+            var indexPath = Path.Combine(basePath, "integeruniquer.index");
+            if (File.Exists(indexPath) && new FileInfo(indexPath).Length > 0)
+            {
+                var indexData = Decompressor.ReadCompressed(indexPath);
+                if (indexData.Length < 40 || (indexData.Length - 40) % 8 != 0 ||
+                    BinaryPrimitives.ReadUInt32LittleEndian(indexData) != 0x01234567 ||
+                    BinaryPrimitives.ReadUInt64LittleEndian(indexData.AsSpan(32)) != 0)
+                    throw new InvalidDataException("Unsupported integer uniquer index.");
+                uint blockSize = BinaryPrimitives.ReadUInt32LittleEndian(indexData.AsSpan(28));
+                if (blockSize < DataHeaderSize || blockSize > int.MaxValue)
+                    throw new InvalidDataException("Invalid integer uniquer block size.");
+                for (int index = 40; index < indexData.Length; index += 8)
+                {
+                    uint withinBlock = BinaryPrimitives.ReadUInt32LittleEndian(indexData.AsSpan(index));
+                    uint block = BinaryPrimitives.ReadUInt32LittleEndian(indexData.AsSpan(index + 4));
+                    ulong offset = (ulong)block * blockSize + withinBlock;
+                    if (withinBlock >= blockSize || offset < DataHeaderSize || offset + 4 > (ulong)data.Length)
+                        throw new InvalidDataException("Integer uniquer reference outside data.");
+                    uint count = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan((int)offset));
+                    ulong entrySize = 4UL + count * 8UL;
+                    if (count > 10_000_000 || offset + entrySize > (ulong)data.Length || withinBlock + entrySize > blockSize)
+                        throw new InvalidDataException("Invalid indexed integer uniquer entry.");
+                    offsetList.Add((int)offset);
+                }
+                offsets = offsetList.ToArray();
+                return;
+            }
+
             int pos = DataHeaderSize;
             while (pos + 4 <= data.Length)
             {
@@ -261,25 +289,58 @@ namespace InstrumentsProcessor.Parsing.TraceBundle
             return vals;
         }
 
-        /// <summary>
-        /// Resolve a tagged backtrace reference → array of frame addresses.
-        /// A tagged backtrace entry contains [backtrace_ref, metadata_ref].
-        /// The first element points to another array entry with the actual frame addresses.
-        /// </summary>
-        public ulong[] ResolveBacktrace(int refIdx)
+        public DecodedBacktrace DecodeBacktrace(int refIdx, string engineeringType)
         {
             var entry = GetArray(refIdx);
             if (entry == null || entry.Length == 0)
-                return entry;
-
-            // If the entry has large values (> 0x100000), they're direct addresses — return as-is
-            if (entry.Length > 2 && entry[0] > 0x100000)
-                return entry;
-
-            // Tagged backtrace: entry[0] is a reference to the actual frame array
-            int frameRef = (int)entry[0];
-            var frames = GetArray(frameRef);
-            return frames ?? entry;
+                return new DecodedBacktrace(Array.Empty<ulong>());
+            if (engineeringType == "XRCoreProfileCallstackTypeID")
+            {
+                if ((entry.Length != 4 && entry.Length != 5 && entry.Length != 8) || entry[0] > int.MaxValue ||
+                    (entry[2] > int.MaxValue && entry[2] != uint.MaxValue))
+                    return new DecodedBacktrace(Array.Empty<ulong>());
+                var process = entry[2] == uint.MaxValue ? null : GetArray((int)entry[2]);
+                long? pid = process != null && process.Length >= 1 ? (long)(uint)process[0] : null;
+                return new DecodedBacktrace(GetArray((int)entry[0]) ?? Array.Empty<ulong>(), pid);
+            }
+            if (engineeringType?.IndexOf("TaggedBacktrace", StringComparison.OrdinalIgnoreCase) >= 0 || engineeringType == "tagged-backtrace")
+            {
+                if (entry.Length != 2 || entry[0] > int.MaxValue)
+                    return new DecodedBacktrace(Array.Empty<ulong>());
+                var chunks = GetArray((int)entry[0]);
+                if (chunks == null || chunks.Length > 4096) return new DecodedBacktrace(Array.Empty<ulong>());
+                var addresses = new List<ulong>();
+                long? owner = null;
+                for (int chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
+                {
+                    ulong chunk = chunks[chunkIndex];
+                    uint frameRef = (uint)chunk;
+                    uint processRef = (uint)(chunk >> 32);
+                    var process = processRef <= int.MaxValue ? GetArray((int)processRef) : null;
+                    if (process != null && process.Length > 0)
+                    {
+                        long pid = (uint)process[0];
+                        if (owner.HasValue && owner != pid) return new DecodedBacktrace(Array.Empty<ulong>());
+                        owner = pid;
+                    }
+                    if (frameRef == uint.MaxValue)
+                    {
+                        if (chunkIndex != chunks.Length - 1) return new DecodedBacktrace(Array.Empty<ulong>());
+                        break;
+                    }
+                    if (frameRef > int.MaxValue) return new DecodedBacktrace(Array.Empty<ulong>());
+                    var frames = GetArray((int)frameRef);
+                    if (frames == null || addresses.Count + (long)frames.Length > 65536)
+                        return new DecodedBacktrace(Array.Empty<ulong>());
+                    addresses.AddRange(frames);
+                }
+                return new DecodedBacktrace(addresses.ToArray(), owner);
+            }
+            if (engineeringType == "backtrace" || engineeringType == "XRBacktraceTypeID")
+                return new DecodedBacktrace(entry);
+            return new DecodedBacktrace(Array.Empty<ulong>());
         }
+
+        public ulong[] ResolveBacktrace(int refIdx) => DecodeBacktrace(refIdx, "backtrace").Addresses;
     }
 }

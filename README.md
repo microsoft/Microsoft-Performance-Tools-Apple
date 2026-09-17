@@ -29,7 +29,19 @@ If it is necessary to load additional symbols, please refer to this section.
 
 ![symbol_load](https://github.com/user-attachments/assets/99e33ce1-c0ca-4ce0-9811-74b31da2b091)
 
--   Note: Symbol decoding is performed on the Mac when the trace is captured, and cannot be done on Windows later
+-   Instruments can save symbol information with the trace. The direct `.trace` loader resolves bundled symbols on Windows and demangles C++ linkage names when no display name is stored. Missing names can be supplied through matching external symbols.
+
+### Direct Trace Symbol Resolution
+
+Open a `.trace` directory (or its `open.creq` marker) or a ZIP bundle named `.trace` with the direct loader. XML import remains supported and unchanged.
+
+The loader uses the trace's recorded image mappings and bundled symbol archives. Matching external dSYMs, Mach-O files, and symbol stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin.
+
+To diagnose symbol resolution:
+
+```powershell
+dotnet run --project DiagTrace/DiagTrace.csproj -c Release -- <trace-path> [symbol-path]
+```
 
 ### [xctrace](https://keith.github.io/xcode-man-pages/xctrace.1.html)
 
@@ -45,9 +57,7 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ## Capture Trace on MacOs:
 - Use Instruments or xctrace to capture the trace. Note that we support some of tables as shown above.
-- Download the [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh) to convert the captured trace into a compatible format for use with our plugin.
-- Open a Terminal and go to your Download folder and run `chmode +x trace-export.sh`
-- Run `./trace-export.sh --input <tracefile.trace>`
+- Copy the `.trace` bundle to Windows and open its `open.creq` marker in WPA. XML import remains available through the optional [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh).
 
 ![485px-Terminal-exporter](https://github.com/user-attachments/assets/e2119700-68f8-44cf-9e4d-dc8dfb612dee)
 
@@ -59,7 +69,7 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 ![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
 - Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.1.ptix"
 
-- Copy captured and exported trace <tracefile.xml> from you Mac device to your Windows machine and open it with the WPA.
+- Copy the captured `.trace` bundle or exported XML from your Mac to Windows and open it with WPA.
 
 ![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
 

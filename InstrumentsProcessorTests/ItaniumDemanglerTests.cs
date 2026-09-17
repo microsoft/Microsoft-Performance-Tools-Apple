@@ -17,10 +17,10 @@ namespace InstrumentsProcessorTests
         // Simple unscoped names
         [InlineData("_Z3fooi", "foo(int)")]
         [InlineData("_Z3fooii", "foo(int, int)")]
-        [InlineData("_Z3foov", "foo()")]
+        [InlineData("_Z3foov", "foo()")] 
 
         // Nested names
-        [InlineData("_ZN3foo3barEv", "foo::bar()")]
+        [InlineData("_ZN3foo3barEv", "foo::bar()")] 
 
         // Mach-O double-underscore prefix
         [InlineData("__Z3fooi", "foo(int)")]
@@ -30,9 +30,9 @@ namespace InstrumentsProcessorTests
                     "foo(int).b18c00d3a73a12ff00b55be6c2eff04a")]
 
         // Constructor / destructor tags
-        [InlineData("_ZN3fooC1Ev", "foo::foo()")]
-        [InlineData("_ZN3fooD0Ev", "foo::~foo()")]
-        [InlineData("_ZN3fooD1Ev", "foo::~foo()")]
+        [InlineData("_ZN3fooC1Ev", "foo::foo()")] 
+        [InlineData("_ZN3fooD0Ev", "foo::~foo()")] 
+        [InlineData("_ZN3fooD1Ev", "foo::~foo()")] 
 
         // Reference type parameter
         [InlineData("_ZN15edge_continuity12string_utils22GetLocalizedStringDictERN4base9DictValueE",
