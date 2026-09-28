@@ -11,5 +11,11 @@ namespace InstrumentsProcessor.Parsing.Events
     {
         public abstract Timestamp Timestamp { get; }
         public abstract Type GetKey();
+
+        /// <summary>
+        /// The name of the schema this event was deserialized from (e.g. "csr-switch-on").
+        /// Set automatically by the deserializer.
+        /// </summary>
+        public string SchemaName { get; set; }
     }
 }

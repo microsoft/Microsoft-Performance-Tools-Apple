@@ -15,6 +15,10 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public Function Function { get; private set; }
 
+        public Frame() { }
+        internal Frame(Function function) { Function = function; }
+        internal Frame(Function function, Module module) { Function = function; Module = module; }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Function")

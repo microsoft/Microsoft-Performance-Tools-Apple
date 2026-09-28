@@ -12,6 +12,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public bool Value { get; private set; }
 
+        public Boolean() { }
+        internal Boolean(bool value) { Value = value; }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Value")

@@ -12,6 +12,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public Microsoft.Performance.SDK.Timestamp Value { get; private set; }
 
+        public Timestamp() { }
+        internal Timestamp(long nanoseconds) { Value = Microsoft.Performance.SDK.Timestamp.FromNanoseconds(nanoseconds); }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "Value")

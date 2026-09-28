@@ -16,6 +16,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public Dictionary<string, long> CounterValues { get; private set; } = new Dictionary<string, long>();
 
+        public PmcEvents() { }
+        internal PmcEvents(Dictionary<string, long> counterValues) { CounterValues = counterValues; }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "CounterValues")

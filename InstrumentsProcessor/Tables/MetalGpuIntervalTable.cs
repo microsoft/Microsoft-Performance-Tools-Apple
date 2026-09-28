@@ -211,6 +211,13 @@ namespace InstrumentsProcessor.Tables
                 AggregationMode = AggregationMode.Sum
             });
 
+        public static bool IsDataAvailable(IDataExtensionRetrieval requiredData)
+        {
+            var data = requiredData.QueryOutput<List<MetalGpuIntervalEvent>>(
+                new DataOutputPath(MetalGpuIntervalCooker.DataCookerPath, nameof(MetalGpuIntervalCooker.MetalGpuIntervalEvents)));
+            return data != null && data.Count > 0;
+        }
+
         public static void BuildTable(
             ITableBuilder tableBuilder,
             IDataExtensionRetrieval requiredData

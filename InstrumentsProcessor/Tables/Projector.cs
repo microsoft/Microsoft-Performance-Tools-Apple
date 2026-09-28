@@ -24,7 +24,7 @@ namespace InstrumentsProcessor.Tables
 
         public static string ModuleProjector(Backtrace backtrace)
         {
-            return backtrace != null && backtrace.Frames.Count > 0 && backtrace.Frames[0] != null ? backtrace.Frames[0].Module.Name : "Unknown";
+            return backtrace != null && backtrace.Frames != null && backtrace.Frames.Count > 0 && backtrace.Frames[0] != null ? backtrace.Frames[0].Module?.Name ?? "Unknown" : "Unknown";
         }
 
         public static string FunctionProjector(Backtrace backtrace)
@@ -42,7 +42,7 @@ namespace InstrumentsProcessor.Tables
             return e.Backtrace;
         }
 
-        public static int ThreadIdProjector(Thread thread)
+        public static long ThreadIdProjector(Thread thread)
         {
             return thread?.ThreadId?.Value ?? -1;
         }
@@ -52,7 +52,7 @@ namespace InstrumentsProcessor.Tables
             return thread?.Name ?? "Unknown";
         }
 
-        public static int ProcessIdProjector(Process process)
+        public static long ProcessIdProjector(Process process)
         {
             return process?.ProcessId?.Value ?? -1;
         }
@@ -157,7 +157,7 @@ namespace InstrumentsProcessor.Tables
             return e.WaitTime?.Value != null ? e.WaitTime.Value : default; // TODO: handle the null case better
         }
 
-        public static int PriorityProjector(ThreadStateEvent e)
+        public static long PriorityProjector(ThreadStateEvent e)
         {
             return e.Priority.Value;
         }
@@ -227,7 +227,7 @@ namespace InstrumentsProcessor.Tables
             return e.Address.Value;
         }
 
-        internal static int SizeProjector(VirtualMemoryEvent e)
+        internal static long SizeProjector(VirtualMemoryEvent e)
         {
             return e.Size.Value; 
         }
@@ -372,7 +372,7 @@ namespace InstrumentsProcessor.Tables
             return e.ChannelName.Value;
         }
 
-        public static int FrameProjector(MetalGpuIntervalEvent e)
+        public static long FrameProjector(MetalGpuIntervalEvent e)
         {
             return e.Frame.Value;
         }
@@ -382,7 +382,7 @@ namespace InstrumentsProcessor.Tables
             return e.CpuToGpuLatency != null ? e.CpuToGpuLatency.Value : TimestampDelta.Zero;
         }
 
-        public static int DepthProjector(MetalGpuIntervalEvent e)
+        public static long DepthProjector(MetalGpuIntervalEvent e)
         {
             return e.Depth.Value;
         }
@@ -402,7 +402,7 @@ namespace InstrumentsProcessor.Tables
             return e.ConnectionUUID.Value;
         }
 
-        public static int ColorProjector(MetalGpuIntervalEvent e)
+        public static long ColorProjector(MetalGpuIntervalEvent e)
         {
             return e.Color.Value;
         }
@@ -427,7 +427,7 @@ namespace InstrumentsProcessor.Tables
             return e.IOSurfaceAccesses.Value;
         }
 
-        public static int BytesProjector(MetalGpuIntervalEvent e)
+        public static long BytesProjector(MetalGpuIntervalEvent e)
         {
             return e.Bytes.Value;
         }
@@ -467,7 +467,7 @@ namespace InstrumentsProcessor.Tables
             return e.DisplayName.Value;
         }
 
-        public static int ColorProjector(DisplayVsyncIntervalEvent e)
+        public static long ColorProjector(DisplayVsyncIntervalEvent e)
         {
             return e.Color.Value;
         }
@@ -546,7 +546,7 @@ namespace InstrumentsProcessor.Tables
             return e.ChannelName?.Value ?? "Unknown";
         }
 
-        public static int DepthProjector(AneHwIntervalEvent e)
+        public static long DepthProjector(AneHwIntervalEvent e)
         {
             return e.Depth?.Value ?? 0;
         }
@@ -561,7 +561,7 @@ namespace InstrumentsProcessor.Tables
             return e.State?.Value ?? "Unknown";
         }
 
-        public static int ColorProjector(AneHwIntervalEvent e)
+        public static long ColorProjector(AneHwIntervalEvent e)
         {
             return e.Color?.Value ?? 0;
         }
@@ -587,7 +587,7 @@ namespace InstrumentsProcessor.Tables
             return e.Group?.Value ?? "Unknown";
         }
 
-        public static int LayoutIdProjector(LifeCyclePeriodEvent e)
+        public static long LayoutIdProjector(LifeCyclePeriodEvent e)
         {
             return e.LayoutId?.Value ?? 0;
         }
@@ -605,6 +605,409 @@ namespace InstrumentsProcessor.Tables
         public static string NarrativeProjector(LifeCyclePeriodEvent e)
         {
             return e.Narrative?.Value ?? string.Empty;
+        }
+
+        // OS Signpost Event Projectors
+        // If value_ms exists: StartTime = EndTime - value_ms, Duration = value_ms
+        // If no value_ms: StartTime = BeginTime, Duration = EndTime - BeginTime
+        public static Timestamp StartTimeProjector(OsSignpostEvent e)
+        {
+            var endTime = e.EndTime ?? e.Time?.Value ?? default;
+            double? valueMs = e.Metadata?.NumericValue;
+            if (valueMs.HasValue)
+            {
+                long valueNs = (long)(valueMs.Value * 1_000_000);
+                return endTime - new TimestampDelta(valueNs);
+            }
+            return e.BeginTime ?? e.Time?.Value ?? default;
+        }
+
+        public static Timestamp StopTimeProjector(OsSignpostEvent e)
+        {
+            return e.EndTime ?? e.Time?.Value ?? default;
+        }
+
+        public static TimestampDelta DurationProjector(OsSignpostEvent e)
+        {
+            double? valueMs = e.Metadata?.NumericValue;
+            if (valueMs.HasValue)
+            {
+                long valueNs = (long)(valueMs.Value * 1_000_000);
+                return new TimestampDelta(valueNs);
+            }
+            var endTime = e.EndTime ?? e.Time?.Value ?? default;
+            var beginTime = e.BeginTime ?? e.Time?.Value ?? default;
+            return endTime - beginTime;
+        }
+
+        public static string SignpostNameProjector(OsSignpostEvent e)
+        {
+            return e.SignpostName?.Value ?? string.Empty;
+        }
+
+        public static string EventTypeProjector(OsSignpostEvent e)
+        {
+            return e.EventType?.Value ?? string.Empty;
+        }
+
+        public static string SubsystemProjector(OsSignpostEvent e)
+        {
+            return e.Subsystem?.Value ?? string.Empty;
+        }
+
+        public static string CategoryProjector(OsSignpostEvent e)
+        {
+            return e.Category?.Value ?? string.Empty;
+        }
+
+        public static string EventNameProjector(OsSignpostEvent e)
+        {
+            return e.Metadata?.EventName ?? string.Empty;
+        }
+
+        public static string PageProjector(OsSignpostEvent e)
+        {
+            if (e.Metadata?.Parameters != null && e.Metadata.Parameters.TryGetValue("page", out string page))
+            {
+                return page;
+            }
+
+            return string.Empty;
+        }
+
+        public static string OuterProjector(OsSignpostEvent e)
+        {
+            if (e.Metadata?.Parameters != null && e.Metadata.Parameters.TryGetValue("outer", out string outer))
+            {
+                return outer;
+            }
+
+            return string.Empty;
+        }
+
+        public static string InstanceProjector(OsSignpostEvent e)
+        {
+            if (e.Metadata?.Parameters != null && e.Metadata.Parameters.TryGetValue("instance", out string instance))
+            {
+                return instance;
+            }
+
+            return string.Empty;
+        }
+
+        public static double ValueProjector(OsSignpostEvent e)
+        {
+            return e.Metadata?.NumericValue ?? 0;
+        }
+
+        public static string MessageProjector(OsSignpostEvent e)
+        {
+            return e.Metadata?.Message ?? string.Empty;
+        }
+
+        public static Process ProcessProjector(OsSignpostEvent e)
+        {
+            return e.Process;
+        }
+
+        public static Thread ThreadProjector(OsSignpostEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static string ScopeProjector(OsSignpostEvent e)
+        {
+            return e.Scope?.Value ?? string.Empty;
+        }
+
+        public static long SignpostIdProjector(OsSignpostEvent e)
+        {
+            return e.SignpostId?.Value ?? 0;
+        }
+
+        // Context Switch Interval Event Projectors
+        public static Timestamp StartTimeProjector(CswitchIntervalEvent e)
+        {
+            return e.StartTime.Value;
+        }
+
+        public static Timestamp StopTimeProjector(CswitchIntervalEvent e)
+        {
+            return e.StartTime.Value + e.Duration.Value;
+        }
+
+        public static TimestampDelta DurationProjector(CswitchIntervalEvent e)
+        {
+            return e.Duration.Value;
+        }
+
+        public static long LayoutIdProjector(CswitchIntervalEvent e)
+        {
+            return e.LayoutId?.Value ?? 0;
+        }
+
+        public static Process ProcessProjector(CswitchIntervalEvent e)
+        {
+            return e.Process;
+        }
+
+        public static Thread ThreadProjector(CswitchIntervalEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static long CpuProjector(CswitchIntervalEvent e)
+        {
+            // Instruments encodes the CPU index as the row's layout-id for cswitch intervals.
+            return e.LayoutId?.Value ?? (long)(e.Cpu?.Value ?? 0);
+        }
+
+        public static ulong DeltaInstructionsProjector(CswitchIntervalEvent e)
+        {
+            return e.DeltaInstructions?.Value ?? 0;
+        }
+
+        public static ulong DeltaCyclesProjector(CswitchIntervalEvent e)
+        {
+            return e.DeltaCycles?.Value ?? 0;
+        }
+
+        public static TimestampDelta DeltaTimeProjector(CswitchIntervalEvent e)
+        {
+            return e.DeltaTime?.Value ?? TimestampDelta.Zero;
+        }
+
+        public static Backtrace SwitchInStackProjector(CswitchIntervalEvent e)
+        {
+            return e.SwitchInStack;
+        }
+
+        public static Backtrace SwitchInKernelStackProjector(CswitchIntervalEvent e)
+        {
+            return e.SwitchInKernelStack;
+        }
+
+        // Virtual Memory Fault Event Projectors
+        public static Timestamp StartTimeProjector(VmFaultEvent e)
+        {
+            return e.StartTime?.Value ?? default;
+        }
+
+        public static Timestamp StopTimeProjector(VmFaultEvent e)
+        {
+            return (e.StartTime?.Value ?? default) + (e.Duration?.Value ?? TimestampDelta.Zero);
+        }
+
+        public static TimestampDelta DurationProjector(VmFaultEvent e)
+        {
+            return e.Duration?.Value ?? TimestampDelta.Zero;
+        }
+
+        public static long LayoutIdProjector(VmFaultEvent e)
+        {
+            return e.LayoutId?.Value ?? 0;
+        }
+
+        public static Process ProcessProjector(VmFaultEvent e)
+        {
+            return e.Process;
+        }
+
+        public static Thread ThreadProjector(VmFaultEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static string OperationProjector(VmFaultEvent e)
+        {
+            ulong code = e.Operation?.Value ?? 0;
+            switch (code)
+            {
+                case 1: return "Zero-fill";
+                case 2: return "Page-in";
+                case 3: return "Copy-on-write (COW)";
+                case 4: return "Cache-hit";
+                case 6: return "Guard";
+                case 7: return "Page-in (vnode dirty)";
+                case 8: return "Page-in (vnode device)";
+                case 9: return "Decompress";
+                case 10: return "Decompress + swap-in";
+                case 11: return "Copy-on-read";
+                default: return code.ToString();
+            }
+        }
+
+        public static TimestampDelta FaultDurationProjector(VmFaultEvent e)
+        {
+            return e.FaultDuration?.Value ?? TimestampDelta.Zero;
+        }
+
+        public static ulong SizeProjector(VmFaultEvent e)
+        {
+            return e.Size?.Value ?? 0;
+        }
+
+        // CSR Switch Event Projectors
+        public static Timestamp TimeProjector(CsrSwitchEvent e)
+        {
+            return e.Time?.Value ?? default;
+        }
+
+        public static Process ProcessProjector(CsrSwitchEvent e)
+        {
+            return e.Process;
+        }
+
+        public static Thread ThreadProjector(CsrSwitchEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static long CpuProjector(CsrSwitchEvent e)
+        {
+            return (long)(e.Cpu?.Value ?? 0);
+        }
+
+        public static ulong InstructionsProjector(CsrSwitchEvent e)
+        {
+            return e.Instructions?.Value ?? 0;
+        }
+
+        public static ulong CyclesProjector(CsrSwitchEvent e)
+        {
+            return e.Cycles?.Value ?? 0;
+        }
+
+        public static string EventTypeProjector(CsrSwitchEvent e)
+        {
+            return e.IsSwitchOn ? "Switch On" : "Switch Off";
+        }
+
+        // CSR Switch Interval Projectors
+        public static Timestamp SwitchOnTimeProjector(CsrSwitchInterval i)
+        {
+            return i.SwitchOnTime;
+        }
+
+        public static Timestamp SwitchOffTimeProjector(CsrSwitchInterval i)
+        {
+            return i.SwitchOffTime;
+        }
+
+        public static TimestampDelta DurationProjector(CsrSwitchInterval i)
+        {
+            return i.Duration;
+        }
+
+        public static Process ProcessProjector(CsrSwitchInterval i)
+        {
+            return i.Process;
+        }
+
+        public static Thread ThreadProjector(CsrSwitchInterval i)
+        {
+            return i.Thread;
+        }
+
+        public static long CpuProjector(CsrSwitchInterval i)
+        {
+            return i.Cpu;
+        }
+
+        public static ulong DeltaInstructionsProjector(CsrSwitchInterval i)
+        {
+            return i.DeltaInstructions;
+        }
+
+        public static ulong DeltaCyclesProjector(CsrSwitchInterval i)
+        {
+            return i.DeltaCycles;
+        }
+
+        // Disk I/O Event Projectors
+        public static Timestamp StartTimeProjector(DiskIoEvent e)
+        {
+            return e.StartTime?.Value ?? default;
+        }
+
+        public static Timestamp StopTimeProjector(DiskIoEvent e)
+        {
+            return (e.StartTime?.Value ?? default) + (e.Latency?.Value ?? TimestampDelta.Zero);
+        }
+
+        public static TimestampDelta LatencyProjector(DiskIoEvent e)
+        {
+            return e.Latency?.Value ?? TimestampDelta.Zero;
+        }
+
+        public static Process ProcessProjector(DiskIoEvent e)
+        {
+            return e.Process;
+        }
+
+        public static Thread ThreadProjector(DiskIoEvent e)
+        {
+            return e.Thread;
+        }
+
+        public static string OperationProjector(DiskIoEvent e)
+        {
+            return e.Operation?.Value ?? string.Empty;
+        }
+
+        public static string SyncModeProjector(DiskIoEvent e)
+        {
+            return e.SyncMode?.Value ?? string.Empty;
+        }
+
+        public static ulong TierProjector(DiskIoEvent e)
+        {
+            return e.Tier?.Value ?? 0;
+        }
+
+        public static string FlagsProjector(DiskIoEvent e)
+        {
+            return e.Flags?.Value ?? string.Empty;
+        }
+
+        public static long SizeProjector(DiskIoEvent e)
+        {
+            return e.Size?.Value ?? 0;
+        }
+
+        public static ulong ThroughputProjector(DiskIoEvent e)
+        {
+            return e.Throughput?.Value ?? 0;
+        }
+
+        public static ulong BlockNumberProjector(DiskIoEvent e)
+        {
+            return e.BlockNumber?.Value ?? 0;
+        }
+
+        public static string DeviceProjector(DiskIoEvent e)
+        {
+            return e.Device?.Value ?? string.Empty;
+        }
+
+        public static ulong QueueDepthProjector(DiskIoEvent e)
+        {
+            return e.QueueDepth?.Value ?? 0;
+        }
+
+        public static string BufTProjector(DiskIoEvent e)
+        {
+            return e.BufT?.Value ?? string.Empty;
+        }
+
+        public static string ErrorProjector(DiskIoEvent e)
+        {
+            return e.Error?.Value ?? string.Empty;
+        }
+
+        public static long ResidProjector(DiskIoEvent e)
+        {
+            return e.Resid?.Value ?? 0;
         }
     }
 }
