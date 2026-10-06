@@ -5,6 +5,8 @@
 
 > Tools are built with open source .NET Core and can be run on the cmd-line or in the WPA GUI. All the logs that are supported are open source. 
 
+> **New in 1.4.0:** WPA can now open Instruments `.trace` files natively. You no longer need to export the trace to XML with `xctrace` / `trace-export.sh` before opening it — just copy the `.trace` from your Mac to Windows and open it in WPA. See [Opening a trace in WPA](#opening-a-trace-in-wpa).
+
 ## Tracing supported:
 
 There are two options for capturing a trace on MacOS. The first is a UI-based trace viewer and capture tool called Instruments, while the second is a command-line tool called xctrace.
@@ -33,8 +35,6 @@ If it is necessary to load additional symbols, please refer to this section.
 
 ### Direct Trace Symbol Resolution
 
-Open a `.trace` directory (or its `open.creq` marker) or a ZIP bundle named `.trace` with the direct loader. XML import remains supported and unchanged.
-
 The loader uses the trace's recorded image mappings and bundled symbol archives. Matching external dSYMs, Mach-O files, and symbol stores can be supplied through `INSTRUMENTS_SYMBOL_PATH` (semicolon-separated) or the `SymbolStore` directory next to the plugin.
 
 To diagnose symbol resolution:
@@ -57,7 +57,21 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 
 ## Capture Trace on MacOs:
 - Use Instruments or xctrace to capture the trace. Note that we support some of tables as shown above.
-- Copy the `.trace` bundle to Windows and open its `open.creq` marker in WPA. XML import remains available through the optional [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh).
+- Copy the `.trace` to Windows and open it directly in WPA (see [Opening a trace in WPA](#opening-a-trace-in-wpa)). Starting with 1.4.0, no XML export step is required.
+
+## Opening a trace in WPA:
+
+Starting with version 1.4.0, the plugin reads Instruments `.trace` files natively. Any of the following work:
+
+- **Zipped `.trace` file** – a ZIP archive of the trace bundle whose file name ends in `.trace`. Open it from WPA's *File -> Open* dialog, or with `wpa.exe -i C:\PATH\TO\MyTrace.trace`.
+- **`.trace` folder** – on Windows an unzipped `.trace` bundle appears as a folder. In WPA's *File -> Open* dialog, navigate into the `.trace` folder and select `open.creq`.
+- **`.trace` folder from the command line** – `wpa.exe -i C:\PATH\TO\MyTrace.trace`, where the path is the `.trace` folder.
+
+### Legacy XML export (optional)
+
+Exporting the trace to XML is no longer required, but XML import is still supported (and is the only option for plugin versions earlier than 1.4.0). To export, run the [Trace Export script](https://github.com/microsoft/Microsoft-Performance-Tools-Apple/blob/main/trace-export.sh) on your Mac:
+
+`./trace-export.sh --input <tracefile.trace>`
 
 ![485px-Terminal-exporter](https://github.com/user-attachments/assets/e2119700-68f8-44cf-9e4d-dc8dfb612dee)
 
@@ -67,9 +81,9 @@ For more info about xctrace please visit:  [xctrace documentation](https://keith
 - Extract the Microsoft-Performance-Tools-Apple.zip
 - Open WPA UI and click Install Plugin
 ![photo_2024-12-11_10-51-56](https://github.com/user-attachments/assets/5af47401-44e2-4f03-b0fe-59da31baa25e)
-- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-1.0.1.ptix"
+- Browse to "%ExtractedFolder\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\PTIX\Microsoft.Performance.Toolkit.Plugins.InstrumentsProcessor-&lt;version&gt;.ptix"
 
-- Copy the captured `.trace` bundle or exported XML from your Mac to Windows and open it with WPA.
+- Copy the captured `.trace` from your Mac to Windows and open it with WPA — no XML export needed (see [Opening a trace in WPA](#opening-a-trace-in-wpa)).
 
 ![749px-IosPlugin](https://github.com/user-attachments/assets/dc0e8c71-e424-4303-8f48-bf0159df1b3e)
 
@@ -98,9 +112,7 @@ For CPU Counters, use Event-Based Sampling to collect a sample every 1 million i
 
 <img width="1500" alt="3" src="https://github.com/user-attachments/assets/252f036a-810a-481d-9795-621222b93cdc" />
 
-Capture the trace and save it. Then run:
-`./trace-export.sh --input <tracefile.trace>`
-to export it for WPA.
+Capture the trace and save it. Then copy the `.trace` to Windows and open it directly in WPA (see [Opening a trace in WPA](#opening-a-trace-in-wpa)).
 
 You can find the template here: 
 `TraceTemplate\CPUCounterWithTimeProfile.tracetemplate`
@@ -132,7 +144,7 @@ The tools can be run in several modes:
   - WPA needs to be told where to find these additional plugins. 
   - In Command Prompt with -addsearchdir and -i trace file:
       ```dos
-        wpa.exe -addsearchdir %USERPROFILE%\Downloads\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\ -i c:\PATH\TO\instruments-trace.xml
+        wpa.exe -addsearchdir %USERPROFILE%\Downloads\Microsoft-Performance-Tools-Apple\Microsoft-Performance-Tools-Apple\MicrosoftPerfToolkitAddins\ -i c:\PATH\TO\MyTrace.trace
      ```
   - OR with Env Variable to pick file from UI
        ```dos
