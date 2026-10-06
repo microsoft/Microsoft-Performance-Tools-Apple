@@ -11,6 +11,9 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public string Name { get; private set; }
 
+        public Module() { }
+        internal Module(string name) { Name = name; }
+
         [CustomDeserialization]
         public string UUID { get; private set; }
 

@@ -5,6 +5,7 @@ using InstrumentsProcessor.Parsing;
 using Microsoft.Performance.SDK.Processing;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using static System.Net.WebRequestMethods;
 
 namespace InstrumentsProcessor
@@ -31,7 +32,8 @@ namespace InstrumentsProcessor
                 return false;
             }
 
-            return true;
+            string ext = Path.GetExtension(fileDataSource.FullPath);
+            return ext.Equals(".xml", StringComparison.OrdinalIgnoreCase);
         }
 
         protected override ICustomDataProcessor CreateProcessorCore(

@@ -21,6 +21,13 @@ namespace InstrumentsProcessor.Parsing.DataModels
         [CustomDeserialization]
         public String DeviceSession { get; private set; }
 
+        public Process() { }
+        internal Process(int pid, string name)
+        {
+            ProcessId = new Integer(pid);
+            Name = name;
+        }
+
         public object DeserializeProperty(XmlNode node, XmlParsingContext context, PropertyInfo property)
         {
             if (property.Name == "ProcessId")

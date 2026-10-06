@@ -18,6 +18,7 @@ namespace InstrumentsProcessor.Parsing.Events
     public class EventDeserializer<TEvent> : IEventDeserializer where TEvent : Event, new()
     {
         private readonly Dictionary<(string Name, string EngineeringType), PropertyInfo> propertiesByColumn;
+        private readonly Dictionary<(string Mnemonic, string EngineeringType), PropertyInfo> propertiesByMnemonic;
         private readonly Dictionary<string, object> propertyDeserializersByName;
         private readonly Dictionary<string, object> propertyDeserializersByEngineeringType;
 
@@ -30,6 +31,7 @@ namespace InstrumentsProcessor.Parsing.Events
         public EventDeserializer()
         {
             propertiesByColumn = new Dictionary<(string Name, string EngineeringType), PropertyInfo>();
+            propertiesByMnemonic = new Dictionary<(string Mnemonic, string EngineeringType), PropertyInfo>();
             propertyDeserializersByName = new Dictionary<string, object>();
             propertyDeserializersByEngineeringType = new Dictionary<string, object>();
 
@@ -42,6 +44,11 @@ namespace InstrumentsProcessor.Parsing.Events
                 if (attribute != null)
                 {
                     propertiesByColumn[(attribute.Name, attribute.EngineeringType)] = property;
+
+                    if (!string.IsNullOrEmpty(attribute.Mnemonic))
+                    {
+                        propertiesByMnemonic[(attribute.Mnemonic, attribute.EngineeringType)] = property;
+                    }
                 }
             }
         }
@@ -56,11 +63,33 @@ namespace InstrumentsProcessor.Parsing.Events
             return engineeringType;
         }
 
+        private bool TryResolveProperty(Schema.Column column, out PropertyInfo property)
+        {
+            string engType = NormalizeEngineeringType(column.EngineeringType);
+
+            if (!string.IsNullOrEmpty(column.Mnemonic) &&
+                propertiesByMnemonic.TryGetValue((column.Mnemonic, engType), out property))
+            {
+                return true;
+            }
+
+            return propertiesByColumn.TryGetValue((column.Name, engType), out property);
+        }
+
         public bool CanDeserialize(Schema schema)
         {
+            HashSet<PropertyInfo> matched = new HashSet<PropertyInfo>();
+
             foreach (Schema.Column column in schema.Columns)
             {
-                if (!propertiesByColumn.ContainsKey((column.Name, NormalizeEngineeringType(column.EngineeringType))))
+                if (!TryResolveProperty(column, out PropertyInfo property))
+                {
+                    return false;
+                }
+
+                // Reject if two schema columns would map to the same event property
+                // (would silently overwrite the first value during deserialization).
+                if (!matched.Add(property))
                 {
                     return false;
                 }
@@ -77,6 +106,7 @@ namespace InstrumentsProcessor.Parsing.Events
             }
 
             TEvent instance = new TEvent();
+            instance.SchemaName = schema.Name;
 
             // Create all property deserializers before we begin deserialization
             CreatePropertyDeserializers(schema);
@@ -85,9 +115,9 @@ namespace InstrumentsProcessor.Parsing.Events
             {
                 Schema.Column column = schema.Columns[i];
 
-                if (!propertiesByColumn.TryGetValue((column.Name, NormalizeEngineeringType(column.EngineeringType)), out PropertyInfo property))
+                if (!TryResolveProperty(column, out PropertyInfo property))
                 {
-                    throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
+                    throw new InvalidOperationException($"No matching property found for column {column.Name} (mnemonic: {column.Mnemonic}) with engineering type {column.EngineeringType}.");
                 }
 
                 if (!propertyDeserializersByName.TryGetValue(property.Name, out object deserializer))
@@ -115,9 +145,9 @@ namespace InstrumentsProcessor.Parsing.Events
         {
             foreach (var column in schema.Columns)
             {
-                if (!propertiesByColumn.TryGetValue((column.Name, NormalizeEngineeringType(column.EngineeringType)), out PropertyInfo property))
+                if (!TryResolveProperty(column, out PropertyInfo property))
                 {
-                    throw new InvalidOperationException($"No matching property found for column {column.Name} with engineering type {column.EngineeringType}.");
+                    throw new InvalidOperationException($"No matching property found for column {column.Name} (mnemonic: {column.Mnemonic}) with engineering type {column.EngineeringType}.");
                 }
 
                 if (!propertyDeserializersByName.ContainsKey(property.Name))

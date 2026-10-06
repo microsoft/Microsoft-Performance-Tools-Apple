@@ -227,6 +227,13 @@ namespace InstrumentsProcessor.Tables
         // This method, with this exact signature, is required so that the runtime can 
         // build your table once all cookers have processed their data.
         //
+        public static bool IsDataAvailable(IDataExtensionRetrieval requiredData)
+        {
+            var data = requiredData.QueryOutput<List<CountersProfileEvent>>(
+                new DataOutputPath(CountersProfileCooker.DataCookerPath, nameof(CountersProfileCooker.CountersProfileEvent)));
+            return data != null && data.Count > 0;
+        }
+
         public static void BuildTable(
             ITableBuilder tableBuilder,
             IDataExtensionRetrieval requiredData
